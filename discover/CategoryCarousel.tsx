@@ -5,7 +5,7 @@ import 'swiper/css';
 import 'swiper/css/navigation';
 import { Swiper, SwiperSlide } from 'swiper/react';
 
-import { Character, User } from '../types';
+import { Character, Participant } from '../types';
 import CharacterSlide from './CharacterSlide';
 
 type CategoryCarouselProps = {
@@ -13,7 +13,7 @@ type CategoryCarouselProps = {
   characters: Character[];
   selectCharacter: (character: Character) => void;
   slidesPerView: number;
-  user: User;
+  user: Participant;
 };
 
 const CategoryCarousel = ({

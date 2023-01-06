@@ -16,7 +16,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import AnswersPage from './AnswersPage';
 import './App.css';
-import CharacterChat from './CharacterChat';
 import CharacterEditor from './CharacterEditor';
 import CharacterHistories from './CharacterHistories';
 import CharacterSearch from './CharacterSearch';
@@ -60,24 +59,30 @@ import {
 } from './utils.js';
 import { buildUrlParams } from './utils.js';
 import { getServerUrl, getSpecialAccessCode } from './utils.js';
+import { CharacterChatTyped } from './CharacterChatTyped';
+import JSONbigInt from 'json-bigint';
 
 const defaultAppContext = {
   unseenPostsCount: 0,
 };
 
 export const AppContext = createContext(defaultAppContext);
-var JSONbigNative = require('json-bigint')({ useNativeBigInt: true });
+const JSONbigNative = JSONbigInt({ useNativeBigInt: true });
 
 axios.defaults.baseURL = getServerUrl();
 axios.defaults.timeout = Constants.DEFAULT_TIMEOUT;
-axios.defaults.transformResponse = [(data) => {
-  if (typeof data === 'string') {
-    try {
-      data = JSONbigNative.parse(data);
-    } catch (e) { /* Ignore */ } // Added this Ignore as it's the same in the Axios
-  }
-  return data;
-}];
+axios.defaults.transformResponse = [
+  (data) => {
+    if (typeof data === 'string') {
+      try {
+        data = JSONbigNative.parse(data);
+      } catch (e) {
+        /* Ignore */
+      } // Added this Ignore as it's the same in the Axios
+    }
+    return data;
+  },
+];
 
 const ANONYMOUS_USER = { user: { username: 'ANONYMOUS' } };
 const CHARACTER_TOKEN_KEY = 'char_token';
@@ -533,6 +538,7 @@ const App = (props) => {
       return (
         <AppContext.Provider value={{ unseenPostsCount: unseenPostsCount }}>
           <div className={'apppage' + Constants.NOTCH}>
+            {Constants.NOTCH && <div className="status-bar-notch"></div>}
             <MessageBanner message={config?.banner_message} />
             <Routes>
               <Route
@@ -589,7 +595,7 @@ const App = (props) => {
                 exact
                 path="/chat"
                 element={
-                  <CharacterChat
+                  <CharacterChatTyped
                     token={token}
                     user={user}
                     userCharacters={userCharacters}
@@ -930,7 +936,7 @@ const App = (props) => {
                 exact
                 path="/chat"
                 element={
-                  <CharacterChat
+                  <CharacterChatTyped
                     token={token}
                     characters={characters}
                     userCharacters={[]}

@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import { getCookieConsentValue } from 'react-cookie-consent';
 import { isIOS, isMobile } from 'react-device-detect';
-import Dropdown from 'react-dropdown';
+import Dropdown, { Option } from 'react-dropdown';
 import 'react-dropdown/style.css';
 import ReactGA from 'react-ga';
 import Hotkeys from 'react-hot-keys';
@@ -31,15 +31,14 @@ import {
 import InfiniteScroll from 'react-infinite-scroll-component';
 import ReactJson from 'react-json-view';
 import Modal from 'react-modal';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
-import { mod } from 'react-swipeable-views-core';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Alert, Button, Spinner } from 'reactstrap';
 import { Navigation } from 'swiper';
 import 'swiper/css';
 import 'swiper/css/navigation';
 import { Swiper, SwiperSlide } from 'swiper/react';
+import SwiperClass from 'swiper/types/swiper-class';
 import * as Tone from 'tone';
 
 import { queryClient } from '.';
@@ -60,6 +59,16 @@ import ImageGeneratingIcon from './components/ImageGeneratingIcon';
 import ImageUpload from './components/ImageUpload';
 import UserImageGeneration from './components/UserImageGeneration';
 import {
+  Character,
+  CharacterInfoResponse,
+  ChatHistoryCreateContinueResponse,
+  ChatHistoryResponse,
+  ChatMessage,
+  Message,
+  Participant,
+  SourceCharacter,
+} from './types';
+import {
   buildUrlParams,
   clearLinkPreviewImage,
   debounce,
@@ -73,25 +82,26 @@ import {
   stripImagePromptText,
 } from './utils.js';
 import { displayNumInteractions } from './utils/character-utils';
+import JSONbigInt from 'json-bigint';
 
 const postVisibilityOptions = [
   { value: 'PUBLIC', label: 'Everyone can see' },
   { value: 'UNLISTED', label: 'Only people with the post link can see' },
 ];
 
-let recognition = null;
+let recognition: SpeechRecognition | null = null;
 let speechMatchBeingProcessed = false;
 
 // Initialize as empty audio file - hack for iOS support
 // https://stackoverflow.com/questions/31776548/why-cant-javascript-play-audio-files-on-iphone-safari
-let initialTtsAudio =
+const initialTtsAudio =
   'data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zQsRbAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zQMSkAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
 
-let ttsAudio = new Audio(initialTtsAudio);
+let ttsAudio: HTMLAudioElement = new Audio(initialTtsAudio);
 ttsAudio.autoplay = true;
-let songPlayer = null;
+let songPlayer: Tone.Player | null = null;
 
-var JSONbigNative = require('json-bigint')({ useNativeBigInt: true });
+const JSONbigNative = JSONbigInt({ useNativeBigInt: true });
 
 const customStyles = {
   content: {
@@ -106,7 +116,7 @@ const customStyles = {
 
 Modal.setAppElement('#root');
 
-const filterOutEmptyUserMessages = (msg) => {
+const filterOutEmptyUserMessages = (msg: ChatViewMessage) => {
   if (
     !msg.isCharTurn &&
     !msg.candidates[0].text &&
@@ -117,29 +127,86 @@ const filterOutEmptyUserMessages = (msg) => {
   return true;
 };
 
+//#NOTE I have no idea what this does lol
 const getFocusableInput = () => {
-  const ref = React.createRef();
+  const ref = React.createRef<HTMLElement>();
   const focus = () => {
     ref.current && ref.current.focus();
   };
   return { focus, ref };
 };
 
-const CharacterChat = (props) => {
+type CharacterChatProps = {
+  token: string;
+  user: Participant;
+  userCharacters: Character[];
+  handleServerError: (err: Error) => void;
+  mode: string;
+  maxLength?: number;
+  number?: number;
+  minimum?: number;
+  character_id?: string;
+  randomUser?: number;
+  onFinished?: (content: string) => void;
+};
+
+interface ChatMessageCandidates {
+  id?: number;
+  text: string;
+  src__user__username?: string;
+  image_rel_path?: string;
+  image_prompt_text?: string;
+  responsible_user__username?: null | string;
+  deleted?: null | boolean;
+  tgt__user__id?: number;
+  display_name?: string;
+  badge_reason?: string;
+  debug_info?: any;
+  annotatable?: boolean;
+  username?: string; //#NOTE REFER`
+  four_star?: boolean;
+  three_star?: boolean;
+  two_star?: boolean;
+  one_star?: boolean;
+  image_one_star?: boolean;
+  image_two_star?: boolean;
+  image_three_star?: boolean;
+  image_four_star?: boolean;
+  translation?: string;
+  renderText?: string;
+  suggested_replies?: string[];
+  remove_reasons?: string[];
+  score?: number;
+  score_type?: string;
+  log_prob?: number;
+  log_prob_per_token?: string;
+  len_tokens?: number;
+  classi_probs?: string[];
+  continuation?: any;
+  query?: string;
+}
+
+interface ChatViewMessage {
+  isCharTurn: boolean;
+  srcChar?: SourceCharacter;
+  candidates: ChatMessageCandidates[];
+}
+
+export const CharacterChatTyped = (props: CharacterChatProps) => {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   const [dummyCounter, setDummyCounter] = useState(123);
   const [staging, setStaging] = useState(query.get('staging') === 'true');
-  const [user, setUser] = useState({});
-  const [charData, setCharData] = useState({ external_id: null, greeting: '' });
-  const [viewMsgs, setViewMsgs] = useState([]);
+  const [user, setUser] = useState<Participant>();
+  const [charData, setCharData] = useState<Character>();
+  const [viewMsgs, setViewMsgs] = useState<ChatViewMessage[]>([]);
   const [lastUpdateLength, setLastUpdateLength] = useState(0);
   const [displayClassiProbs, setDisplayClassiProbs] = useState([]);
   const [waiting, setWaiting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [asrEnabled, setAsrEnabled] = useState(false);
   const [titleExpanded, setTitleExpanded] = useState(false);
-  const [history, setHistory] = useState({});
+  const [history, setHistory] = useState<ChatHistoryCreateContinueResponse>();
   const [hasHistories, setHasHistories] = useState(false);
   const [altIndex, setAltIndex] = useState(0);
 
@@ -156,21 +223,30 @@ const CharacterChat = (props) => {
   const [devToolsEnabled, setDevToolsEnabled] = useState(
     localStorage.getItem('devToolsEnabled') === 'true',
   );
-  const [insertBeginning, setInsertBeginning] = useState(null);
-  const [overrideModelServerAddress, setOverrideModelServerAddress] =
-    useState(null);
-  const [translateCandidates, setTranslateCandidates] = useState(false);
-  const [translateTap, setTranslateTap] = useState(false);
-  const [translateTapToggle, setTranslateTapToggle] = useState(false);
-  const [overrideHistorySet, setOverrideHistorySet] = useState(null);
-  const [overridePrefix, setOverridePrefix] = useState(null);
-  const [overrideRank, setOverrideRank] = useState(null);
-  const [rankCandidates, setRankCandidates] = useState(null);
-  const [filterCandidates, setFilterCandidates] = useState(null);
-  const [prefixLimit, setPrefixLimit] = useState(null);
-  const [prefixTokenLimit, setPrefixTokenLimit] = useState(null);
-  const [livetuneCoeff, setLivetuneCoeff] = useState(null);
-  const [streamParams, setStreamParams] = useState(null);
+  const [insertBeginning, setInsertBeginning] = useState<string | null>(null);
+  const [overrideModelServerAddress, setOverrideModelServerAddress] = useState<
+    string | null
+  >(null);
+  const [translateCandidates, setTranslateCandidates] = useState<
+    boolean | null
+  >(false);
+  const [translateTap, setTranslateTap] = useState<boolean | null>(false);
+  const [translateTapToggle, setTranslateTapToggle] = useState<boolean | null>(
+    false,
+  );
+  const [overrideHistorySet, setOverrideHistorySet] = useState<string | null>(
+    null,
+  );
+  const [overridePrefix, setOverridePrefix] = useState<string | null>(null);
+  const [overrideRank, setOverrideRank] = useState<string | null>(null);
+  const [rankCandidates, setRankCandidates] = useState<boolean | null>(null);
+  const [filterCandidates, setFilterCandidates] = useState<boolean | null>(
+    null,
+  );
+  const [prefixLimit, setPrefixLimit] = useState<string | null>(null);
+  const [prefixTokenLimit, setPrefixTokenLimit] = useState<string | null>(null);
+  const [livetuneCoeff, setLivetuneCoeff] = useState<string | null>(null);
+  const [streamParams, setStreamParams] = useState<string | null>(null);
 
   // TODO(Bowen, Igor): should we set default to null?
   const defaultStreamEveryNSteps = 16; // If you change here, also change the default in server/chat/views/views.py.
@@ -178,53 +254,62 @@ const CharacterChat = (props) => {
 
   const defaultAnimationChunkSize = 1;
   const defaultAnimationChunkDelay = 18; // ms
-  const [streamEveryNSteps, setStreamEveryNSteps] = useState(
+  const [streamEveryNSteps, setStreamEveryNSteps] = useState<number | null>(
     defaultStreamEveryNSteps,
   );
-  const [streamChunksToPad, setStreamChunksToPad] = useState(
+  const [streamChunksToPad, setStreamChunksToPad] = useState<number | null>(
     defaultStreamChunksToPad,
   );
-  const [streamAnimationChunkSize, setStreamAnimationChunkSize] = useState(
-    defaultAnimationChunkSize,
+  const [streamAnimationChunkSize, setStreamAnimationChunkSize] = useState<
+    number | null
+  >(defaultAnimationChunkSize);
+  const [streamAnimationChunkDelay, setStreamAnimationChunkDelay] = useState<
+    number | null
+  >(defaultAnimationChunkDelay);
+  const [enableTextToImage, setEnableTextToImage] = useState<boolean | null>(
+    null,
   );
-  const [streamAnimationChunkDelay, setStreamAnimationChunkDelay] = useState(
-    defaultAnimationChunkDelay,
-  );
-  const [enableTextToImage, setEnableTextToImage] = useState(null);
-  const [chatTimeout, setChatTimeout] = useState(null);
+  const [chatTimeout, setChatTimeout] = useState<number | null>(null);
   const [prefix, setPrefix] = useState('');
-  const [externalHistoryId, setExternalHistoryId] = useState(null);
+  const [externalHistoryId, setExternalHistoryId] = useState<string | null>(
+    null,
+  );
   const [characterId, setCharacterId] = useState(props.character_id);
   const avatarSize = 45;
   const [currentLength, setCurrentLength] = useState(0);
   const [isProactive, setIsProactive] = useState(false);
   const [postTitle, setPostTitle] = useState('');
-  const [postVisibility, setPostVisibility] = useState(
+  const [postVisibility, setPostVisibility] = useState<Option>(
     postVisibilityOptions[0],
   );
   const [postButtonEnabled, setPostButtonEnabled] = useState(false);
 
   const [deleteMessageMode, setDeleteMessageMode] = useState(false);
-  const [deleteMessagesIds, setDeleteMessagesIds] = useState([]);
+  const [deleteMessagesIds, setDeleteMessagesIds] = useState<number[]>([]);
   const [deletingMessages, setDeletingMessages] = useState(false);
 
-  const [postStartMessageIndex, setPostStartMessageIndex] = useState(null);
-  const [postEndMessageIndex, setPostEndMessageIndex] = useState(null);
-  const [hoverPostStartMessageIndex, setHoverPostStartMessageIndex] =
-    useState(null);
-  const [lastHoverIndex, setLastHoverIndex] = useState(null);
+  const [postStartMessageIndex, setPostStartMessageIndex] = useState<
+    number | null
+  >(null);
+  const [postEndMessageIndex, setPostEndMessageIndex] = useState<number | null>(
+    null,
+  );
+  const [hoverPostStartMessageIndex, setHoverPostStartMessageIndex] = useState<
+    number | null
+  >(null);
+  const [lastHoverIndex, setLastHoverIndex] = useState<number | null>(null);
   const [isSelectingPostStartEnd, setIsSelectingPostStartEnd] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [numStreamedMessages, setNumStreamedMessages] = useState(0);
   // The next chat page to load.
-  const [chatPageNum, setChatPageNum] = useState(null);
+  const [chatPageNum, setChatPageNum] = useState<number | null>(null);
   // There are more pages of chat available.
-  const [chatHasMore, setChatHasMore] = useState(false);
+  const [chatHasMore, setChatHasMore] = useState<boolean | undefined>(false);
   const [chatHeight, setChatHeight] = useState(window.innerHeight - 143);
   // Prevents scrolling down when paginating for more chats upwards.
   const [justPaginatedUpwards, setJustPaginatedUpwards] = useState(false);
-  const [errorImagePaths, setErrorImagePaths] = useState([]);
-  const [loadedImagePaths, setLoadedImagePaths] = useState([]);
+  const [errorImagePaths, setErrorImagePaths] = useState<string[]>([]);
+  const [loadedImagePaths, setLoadedImagePaths] = useState<string[]>([]);
   const [imageGenerationModalOpen, setImageGenerationModalOpen] =
     useState(false);
   const [imageUploadModalOpen, setImageUploadModalOpen] = useState(false);
@@ -238,11 +323,13 @@ const CharacterChat = (props) => {
 
   const [generatingCandidate, setGeneratingCandidate] = useState(false);
   const [abortPrevChatRequest, setAbortPrevChatRequest] = useState(false);
-  const [primaryCandidate, setPrimaryCandidate] = useState();
-  const [seenCandidateIds, setSeenCandidateIds] = useState([]);
+  const [primaryCandidate, setPrimaryCandidate] =
+    useState<ChatMessageCandidates | null>();
+  const [seenCandidateIds, setSeenCandidateIds] = useState<number[]>([]);
+  const [isNewHistory, setIsNewHistory] = useState(false);
 
-  const primaryCandidateRef = useRef();
-  const seenCandidateIdsRef = useRef();
+  const primaryCandidateRef = useRef<ChatMessageCandidates | null>();
+  const seenCandidateIdsRef = useRef<number[] | null>();
 
   const generatingCandidateRef = useRef(false);
   const abortPrevChatRequestRef = useRef(false);
@@ -252,25 +339,27 @@ const CharacterChat = (props) => {
   // Whether the calls to history/character were authorized (eg did they access a Character they can't talk to)
   const [authorized, setAuthorized] = useState(true);
 
-  const [swiper, setSwiper] = useState(null);
+  const [swiper, setSwiper] = useState<SwiperClass | null>(null);
 
   const navigate = useNavigate();
-  const proactiveTimer = useRef(null);
+  const proactiveTimer = useRef<NodeJS.Timeout | null | undefined>(null);
   const MAX_PARTICIPANTS_IN_HEADER = 7;
   const MAX_WIDTH = '1224px';
 
   useEffect(() => {
     ttsAudio = new Audio(initialTtsAudio);
     // Hack to ensure safari plays sounds later
-    window.AudioContext = window.AudioContext || window.webkitAudioContext;
+    (window as any).audioContext =
+      (window as any).audioContext || (window as any).webkitAudioContext;
     if (window.AudioContext) {
-      window.audioContext = new window.AudioContext();
+      (window as any).audioContext = new window.AudioContext();
 
-      const source = window.audioContext.createMediaElementSource(ttsAudio);
-      const gainNode = window.audioContext.createGain();
+      const source =
+        (window as any).audioContext.createMediaElementSource(ttsAudio);
+      const gainNode = (window as any).audioContext.createGain();
       gainNode.gain.value = 2;
       source.connect(gainNode);
-      gainNode.connect(window.audioContext.destination);
+      gainNode.connect((window as any).audioContext.destination);
     }
   }, []);
 
@@ -299,13 +388,15 @@ const CharacterChat = (props) => {
     setcharacterVoiceEnabled(!characterVoiceEnabled);
   };
 
-  const maxSwipes = useMemo(() =>
-    isAnonymousUser(user)
-      ? Constants.MAX_SWIPES_ANONYMOUS
-      : Constants.MAX_SWIPES,
+  const maxSwipes = useMemo(
+    () =>
+      isAnonymousUser(user)
+        ? Constants.MAX_SWIPES_ANONYMOUS
+        : Constants.MAX_SWIPES,
+    [user],
   );
 
-  const showAvatar = (name, size, avatar_file_name) => {
+  const showAvatar = (name: string, size: number, avatar_file_name: string) => {
     return (
       <InitialAvatar
         name={name || ''}
@@ -319,7 +410,7 @@ const CharacterChat = (props) => {
     );
   };
 
-  function get_boolean_param(urlParams, field) {
+  function get_boolean_param(urlParams: URLSearchParams, field: string) {
     const val = urlParams.get(field);
     if (val) {
       return val === 'true';
@@ -328,7 +419,11 @@ const CharacterChat = (props) => {
     }
   }
 
-  function get_int_param(urlParams, field, default_value = null) {
+  function get_int_param(
+    urlParams: URLSearchParams,
+    field: string,
+    default_value: number | null = null,
+  ) {
     const val = urlParams.get(field);
     if (val) {
       return parseInt(val);
@@ -442,13 +537,16 @@ const CharacterChat = (props) => {
   }, []);
 
   const resetProactiveTimer = () => {
-    clearTimeout(proactiveTimer.current);
+    if (proactiveTimer.current) {
+      //#NEWCODE
+      clearTimeout(proactiveTimer.current);
+    }
     setIsProactive(false);
     proactiveTimer.current = getProactiveTimer();
   };
 
   useEffect(() => {
-    if (charData.songs && charData.songs[0] && !songPlayer) {
+    if (charData?.songs && charData?.songs[0] && !songPlayer) {
       // TODO set volume
       songPlayer = new Tone.Player(
         `${Constants.CDN_URL}/static/music/${charData.songs[0].file_name}`,
@@ -458,14 +556,14 @@ const CharacterChat = (props) => {
       songPlayer.autostart = true;
     }
 
-    if (isRoom()) {
+    if (isRoom() && history?.participants) {
       const roomTitle = `My chat with ${history.participants
         .filter((p) => !p.is_human)
         .map((p) => p.name)
         .join(', ')}`;
       setPostTitle(roomTitle);
     } else {
-      setPostTitle(`My chat with ${charData.name}`);
+      setPostTitle(`My chat with ${charData?.name}`);
     }
   }, [charData, history]);
 
@@ -500,7 +598,7 @@ const CharacterChat = (props) => {
     seenCandidateIdsRef.current = seenCandidateIds;
   }, [seenCandidateIds]);
 
-  const updatePrimaryToGeneratedCandidate = (candidate) => {
+  const updatePrimaryToGeneratedCandidate = (candidate: ChatMessage) => {
     // Mark this message as the seen IF the user is still looking at that message
     if (altIndexRef.current === generatingCandidateIndex) {
       markCandidateAsSeen(candidate);
@@ -515,19 +613,21 @@ const CharacterChat = (props) => {
     let definition = '';
     // only produce a change to definition if something beyond greeting was said
     // only valid in creation mode
-    if (viewMsgs.length > 2 || (charData.greeting && viewMsgs.length > 1)) {
+    if (viewMsgs.length > 2 || (charData?.greeting && viewMsgs.length > 1)) {
       for (let i = 0; i < viewMsgs.length; i++) {
         // the last item we need to pick baced on swipable view in front
-        let msg = viewMsgs[i];
+        const msg = viewMsgs[i];
         let name = '';
         if (props.mode === 'creation') {
           name = msg.isCharTurn
             ? '{{char}}'
             : '{{random_user_' + props.randomUser + '}}';
         } else {
-          name = msg.isCharTurn ? msg.srcChar?.participant.name : user.name;
+          name = msg.isCharTurn
+            ? msg.srcChar?.participant.name ?? ''
+            : user?.name ?? '';
         }
-        let index = i === viewMsgs.length - 1 ? altIndex : 0;
+        const index = i === viewMsgs.length - 1 ? altIndex : 0;
         definition =
           definition + name + ': ' + msg.candidates[index].text + '\n';
       }
@@ -539,8 +639,8 @@ const CharacterChat = (props) => {
 
   axios.defaults.baseURL = getServerUrl();
 
-  const messagesListBottom = useRef(null);
-  let inputFocus = getFocusableInput();
+  const messagesListBottom = useRef<HTMLDivElement>(null);
+  const inputFocus = getFocusableInput();
 
   const forceUpdate = () => {
     setDummyCounter(dummyCounter + 1);
@@ -548,7 +648,9 @@ const CharacterChat = (props) => {
 
   const saveMessages = () => {
     // if no new messages have been created, just move on
-    props.onFinished(viewMsgsToDefintion());
+    if (props.onFinished) {
+      props.onFinished(viewMsgsToDefintion());
+    }
 
     // make a new chat so that when creator returns to chat, it'll be a new one (rather than example)
     // TODO: consider a flag in model or on messages as "training"
@@ -563,7 +665,7 @@ const CharacterChat = (props) => {
 
   const closeMicModal = () => {
     setMicModalIsOpen(false);
-    recognition.start();
+    recognition?.start();
   };
 
   const [postCreationModalIsOpen, setPostCreationModalIsOpen] =
@@ -580,11 +682,11 @@ const CharacterChat = (props) => {
     }
   };
 
-  const handlePostChange = (event) => {
+  const handlePostChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setPostTitle(event.target.value);
   };
 
-  const isInBetweenHoverPostStartEnd = (i) => {
+  const isInBetweenHoverPostStartEnd = (i: number) => {
     return (
       i == hoverPostStartMessageIndex ||
       i == lastHoverIndex ||
@@ -606,23 +708,27 @@ const CharacterChat = (props) => {
     closePostCreationModal(false);
   };
 
-  const hoverMessageForPostStartAndEnd = (i) => {
+  const hoverMessageForPostStartAndEnd = (i: number) => {
     if (!isSelectingPostStartEnd) {
       return;
     }
     setLastHoverIndex(i);
   };
 
-  const clickMessage = (i) => {
+  const clickMessage = (i: number) => {
     clickMessageForPostStartAndEnd(i);
     clickMessageForDelete(i);
   };
 
-  const removeDeletedMessagesFromViewMsgs = (deleteMessagesIds) => {
+  const removeDeletedMessagesFromViewMsgs = (deleteMessagesIds: number[]) => {
     const updatedViewMsgs = [...viewMsgs];
     for (let i = 0; i < updatedViewMsgs.length; i++) {
       for (let j = 0; j < updatedViewMsgs[i].candidates.length; j++) {
-        if (deleteMessagesIds.includes(updatedViewMsgs[i].candidates[j].id)) {
+        const id = updatedViewMsgs[i].candidates[j].id;
+        if (
+          id !== undefined && //#NOTE NEW CODE
+          deleteMessagesIds.includes(id)
+        ) {
           updatedViewMsgs[i].candidates[j].deleted = true;
         }
       }
@@ -635,7 +741,7 @@ const CharacterChat = (props) => {
     sendChatStreaming(isProactive, true);
   };
 
-  const clickMessageForDelete = (i) => {
+  const clickMessageForDelete = (i: number) => {
     if (!deleteMessageMode) {
       return;
     }
@@ -653,20 +759,20 @@ const CharacterChat = (props) => {
     }
 
     // Select current messages + following messages
-    let selectedIds = [];
+    let selectedIds: number[] = [];
     for (let idx = i; idx < viewMsgs.length; idx++) {
       selectedIds = [
         ...selectedIds,
-        ...viewMsgs[idx].candidates
+        ...(viewMsgs[idx].candidates
           .map((c) => c.id)
-          .filter((id) => id !== undefined),
+          .filter((id) => id !== undefined) as number[]),
       ];
     }
 
     setDeleteMessagesIds(selectedIds);
   };
 
-  const clickMessageForPostStartAndEnd = (i) => {
+  const clickMessageForPostStartAndEnd = (i: number) => {
     if (!isSelectingPostStartEnd) {
       return;
     }
@@ -714,7 +820,8 @@ const CharacterChat = (props) => {
       if (ttsAudio) {
         ttsAudio.pause();
       }
-      ttsAudio = null;
+      //#NOTE ttsAudio is not nullable
+      //   ttsAudio = null;
       if (songPlayer) {
         songPlayer.stop();
       }
@@ -723,7 +830,7 @@ const CharacterChat = (props) => {
   }, []);
 
   useEffect(() => {
-    if (user.user?.id && characterId) {
+    if (user?.user?.id && characterId) {
       loadCharacterInfo(characterId);
     }
   }, [user]);
@@ -755,7 +862,7 @@ const CharacterChat = (props) => {
       };
       const asrEnableAttempted = localStorage.getItem('asrEnableAttempted');
       if (!asrEnableAttempted) {
-        localStorage.setItem('asrEnableAttempted', true);
+        localStorage.setItem('asrEnableAttempted', 'true');
         openMicModal();
       } else {
         recognition.start();
@@ -766,14 +873,14 @@ const CharacterChat = (props) => {
     }
   }, [asrEnabled]);
 
-  const loadCharacterInfo = async (external_id) => {
+  const loadCharacterInfo = async (external_id: string) => {
     const characterBelongsToUser = props.userCharacters?.find(
       (c) => c.external_id === external_id,
     );
 
     let response;
     if (characterBelongsToUser) {
-      response = await axios.post(
+      response = await axios.post<CharacterInfoResponse>(
         '/chat/character/info/',
         {
           external_id: external_id,
@@ -781,7 +888,7 @@ const CharacterChat = (props) => {
         getHeaders(),
       );
     } else {
-      response = await axios.get(
+      response = await axios.get<CharacterInfoResponse>(
         `/chat/character/info-cached/${external_id}/`,
         getHeaders(),
       );
@@ -851,10 +958,10 @@ const CharacterChat = (props) => {
   const continueHistory = async () => {
     setWaiting(true);
     return await axios
-      .post(
+      .post<ChatHistoryCreateContinueResponse>(
         '/chat/history/continue/',
         {
-          character_external_id: charData.external_id,
+          character_external_id: charData?.external_id,
           history_external_id: externalHistoryId,
         },
         getHeaders(),
@@ -883,10 +990,10 @@ const CharacterChat = (props) => {
   };
 
   const createNewHistory = async () => {
-    if (charData.external_id) {
+    if (charData?.external_id) {
       setWaiting(true);
       return await axios
-        .post(
+        .post<ChatHistoryCreateContinueResponse>(
           '/chat/history/create/',
           {
             character_external_id: charData.external_id,
@@ -897,8 +1004,8 @@ const CharacterChat = (props) => {
         .then((response) => {
           if (response?.data.status == 'OK') {
             setViewMsgs([]);
-            response.data['isNewHistory'] = true;
-            setHistory(response.data);
+
+            setHistory({ ...response.data });
             setCurrentLength(0);
             setAltIndex(0);
             if (response.data.speech) {
@@ -926,7 +1033,7 @@ const CharacterChat = (props) => {
   }, [loading]);
 
   useEffect(() => {
-    if (loading && history.external_id) {
+    if (loading && history?.external_id) {
       loadMessages();
       proactiveTimer.current = getProactiveTimer(true);
     }
@@ -936,19 +1043,23 @@ const CharacterChat = (props) => {
      If clean is true, replaces the current viewMsgs. Otherwise,
      preserves the current messages and prepends the new messages before
   */
-  const setupMessages = (msgs, clean) => {
-    let new_viewMsgs = [];
+  const setupMessages = (msgs: Message[] | undefined, clean: boolean) => {
+    const new_viewMsgs: ChatViewMessage[] = [];
+    if (!msgs) {
+      return;
+    }
+
     for (let i = 0; i < msgs.length; i++) {
-      let msg = msgs[i];
+      const msg = msgs[i];
       if (!msg.is_alternative) {
-        const newMsg = {
+        const newMsg: ChatViewMessage = {
           isCharTurn: !msg.src__is_human,
           candidates: [
             {
               id: msg.id,
               text: msg.text,
               image_rel_path: msg.image_rel_path,
-              image_prompt: msg.image_prompt,
+              image_prompt_text: msg.image_prompt_text,
               responsible_user__username: msg.responsible_user__username,
               deleted: msg.deleted,
               badge_reason: msg?.badge_reason,
@@ -968,12 +1079,12 @@ const CharacterChat = (props) => {
         // Handle the alternatives bro!
         // The alternative messages all come from the last message.
         // So we just add it to the candidates of the last message.
-        let last_viewMsg = new_viewMsgs[new_viewMsgs.length - 1];
+        const last_viewMsg = new_viewMsgs[new_viewMsgs.length - 1];
         last_viewMsg.candidates.push({
           id: msg.id,
           text: msg.text,
           image_rel_path: msg.image_rel_path,
-          image_prompt: msg.image_prompt,
+          image_prompt_text: msg.image_prompt_text,
           responsible_user__username: msg.responsible_user__username,
           deleted: msg.deleted,
         });
@@ -992,30 +1103,45 @@ const CharacterChat = (props) => {
     }
   };
 
-  const setMsgsFromResponseData = (data, clean) => {
+  const setMsgsFromResponseData = (
+    messages: Message[] | undefined,
+    hasMore: boolean | undefined,
+    nextPage: number,
+    clean: boolean,
+  ) => {
     setJustPaginatedUpwards(true);
-    setupMessages(data.messages, clean);
+    setupMessages(messages, clean);
     setLoading(false);
     setWaiting(false);
-    setChatPageNum(data.next_page);
-    setChatHasMore(data.has_more);
+    setChatPageNum(nextPage);
+    setChatHasMore(hasMore);
   };
 
   const loadMessages = async (clean = false) => {
-    if (history && history.isNewHistory) {
-      setMsgsFromResponseData(history, clean);
+    if (history && isNewHistory) {
+      setMsgsFromResponseData(
+        history.messages,
+        history.has_more,
+        history.next_page,
+        clean,
+      );
       inputFocus.focus();
       return;
     }
     const pageNumField =
       chatPageNum && !clean ? `&page_num=${chatPageNum}` : '';
     axios
-      .get(
-        `/chat/history/msgs/user/?history_external_id=${history.external_id}${pageNumField}`,
+      .get<ChatHistoryResponse>(
+        `/chat/history/msgs/user/?history_external_id=${history?.external_id}${pageNumField}`,
         getHeaders(),
       )
       .then((response) => {
-        setMsgsFromResponseData(response.data, clean);
+        setMsgsFromResponseData(
+          response.data.messages,
+          response.data.has_more,
+          0,
+          clean,
+        );
       })
       .catch((err) => {
         props.handleServerError(err);
@@ -1028,7 +1154,7 @@ const CharacterChat = (props) => {
 
   const getHeaders = () => {
     return {
-      headers: { Authorization: 'Token ' + props.token, 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Token ' + props.token },
     };
   };
 
@@ -1042,7 +1168,7 @@ const CharacterChat = (props) => {
   };
 
   const updateDefinitionLength = () => {
-    let newDefinition = viewMsgsToDefintion();
+    const newDefinition = viewMsgsToDefintion();
     setCurrentLength(newDefinition.length);
     setLastUpdateLength(viewMsgs.length);
   };
@@ -1051,9 +1177,9 @@ const CharacterChat = (props) => {
     - locking the swiped selection
     - inserting the user response
     */
-  const updateViewMsgs = async (text) => {
+  const updateViewMsgs = async (text: string) => {
     // swiped, need to lock in current as final
-    const userMsg = {
+    const userMsg: ChatViewMessage = {
       isCharTurn: false,
       candidates: [
         {
@@ -1063,7 +1189,7 @@ const CharacterChat = (props) => {
             userImageDescriptionType === 'human'
               ? 'image_described_by_human'
               : '',
-          username: user.user.username || 'guest',
+          username: user?.user?.username || 'guest',
         },
       ],
     };
@@ -1077,9 +1203,13 @@ const CharacterChat = (props) => {
     const appendUserMsg = text || userImagePath;
 
     if (altIndex > 0) {
-      let oldViewMsgs = viewMsgs;
-      let vmsg = oldViewMsgs.pop();
-      let front = [];
+      const oldViewMsgs = viewMsgs;
+      const vmsg = oldViewMsgs.pop();
+      const front = [];
+
+      if (!vmsg) {
+        return;
+      }
 
       front.push(vmsg.candidates[altIndex]);
       for (let i = 0; i < vmsg.candidates.length; i++) {
@@ -1092,10 +1222,10 @@ const CharacterChat = (props) => {
       vmsg.candidates = front;
       // also add user text if they entered some
       if (appendUserMsg) {
-        setViewMsgs((oldArray) => [...oldViewMsgs, vmsg, userMsg]);
+        setViewMsgs(() => [...oldViewMsgs, vmsg, userMsg]);
         // no user text, just lock in primary change
       } else {
-        setViewMsgs((oldArray) => [...oldViewMsgs, vmsg]);
+        setViewMsgs(() => [...oldViewMsgs, vmsg]);
       }
 
       // no swipe to change, just add user text if they entered some
@@ -1140,26 +1270,32 @@ const CharacterChat = (props) => {
   };
 
   const setupSpeechRecognition = () => {
-    if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
+    //#NOTE terrible hack
+
+    if (
+      !(window as any).SpeechRecognition &&
+      !(window as any).webkitSpeechRecognition
+    ) {
       // Speech recognition not supported (e.g., in Firefox).
       return;
     }
     const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
+      window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+    recognition = new SpeechRecognition() as SpeechRecognition;
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.onresult = function (event) {
+    recognition.onresult = function (event: SpeechRecognitionEvent) {
       speechMatchBeingProcessed = true;
       if (ttsAudio) {
         ttsAudio.pause();
       }
       setText(event.results[0][0].transcript);
     };
-    recognition.onspeechstart = function (event) {
-      //console.log("Speech has been detected");
-    };
+    //#NOTE unused
+    // recognition.onspeechstart = function (event) {
+    //   //console.log("Speech has been detected");
+    // };
   };
 
   const handleToggleAsr = () => {
@@ -1170,7 +1306,10 @@ const CharacterChat = (props) => {
     setTitleExpanded(!titleExpanded);
   };
 
-  const playTTS = async (audioString, startRecognitionOnAudioEnd = false) => {
+  const playTTS = async (
+    audioString: string,
+    startRecognitionOnAudioEnd = false,
+  ) => {
     if (!characterVoiceEnabled) {
       return;
     }
@@ -1181,7 +1320,8 @@ const CharacterChat = (props) => {
 
     ttsAudio.src = 'data:audio/wav;base64,' + audioString;
 
-    let resolveAudioEnded = null;
+    //#NOTE WHAT DID THIS DO?
+    let resolveAudioEnded: any = null;
     const audioEnded = new Promise((resolve) => {
       resolveAudioEnded = resolve;
     });
@@ -1201,32 +1341,33 @@ const CharacterChat = (props) => {
     return audioEnded;
   };
 
-  const playAsyncTTS = async (
-    resolveAudioEnded,
-    audioString,
-    startRecognitionOnAudioEnd = false,
-  ) => {
-    if (!characterVoiceEnabled) {
-      return;
-    }
-    setMusicVolumeToLow();
+  //#NOTE UNUSED
+  //   const playAsyncTTS = async (
+  //     resolveAudioEnded,
+  //     audioString,
+  //     startRecognitionOnAudioEnd = false,
+  //   ) => {
+  //     if (!characterVoiceEnabled) {
+  //       return;
+  //     }
+  //     setMusicVolumeToLow();
 
-    ttsAudio.src = 'data:audio/wav;base64,' + audioString;
+  //     ttsAudio.src = 'data:audio/wav;base64,' + audioString;
 
-    ttsAudio.addEventListener(
-      'ended',
-      () => {
-        resolveAudioEnded();
-        setMusicVolumeToNormal();
-        if (startRecognitionOnAudioEnd && recognition && asrEnabled) {
-          speechMatchBeingProcessed = false;
-          recognition.start();
-        }
-      },
-      false,
-    );
-    ttsAudio.play();
-  };
+  //     ttsAudio.addEventListener(
+  //       'ended',
+  //       () => {
+  //         resolveAudioEnded();
+  //         setMusicVolumeToNormal();
+  //         if (startRecognitionOnAudioEnd && recognition && asrEnabled) {
+  //           speechMatchBeingProcessed = false;
+  //           recognition.start();
+  //         }
+  //       },
+  //       false,
+  //     );
+  //     ttsAudio.play();
+  //   };
 
   const restartMusic = () => {
     // TODO
@@ -1240,30 +1381,35 @@ const CharacterChat = (props) => {
     // TODO
   };
 
-  const updatePrimary = useCallback(async (candidate) => {
-    if (!candidate || candidate.id === -1 || !candidate.id) {
-      return;
-    }
+  const updatePrimary = useCallback(
+    async (candidate: ChatMessageCandidates) => {
+      if (!candidate || candidate.id === -1 || !candidate.id) {
+        return;
+      }
 
-    setNegativeLabels(candidate);
-    await axios
-      .post(
-        '/chat/msg/update/primary/',
-        JSONbigNative.stringify({
-          message_id: candidate.id,
-          reason: 'SWIPE',
-        }),
-        getHeaders(),
-      )
-      .then((response) => {})
+      setNegativeLabels(candidate);
+      await axios
+        .post(
+          '/chat/msg/update/primary/',
+          JSONbigNative.stringify(
+            {
+              message_id: candidate.id,
+              reason: 'SWIPE',
+            }),
+          getHeaders(),
+        )
+        //#UNUSED RESPONSE
+        //   .then((response) => {})
 
-      .catch((err) => {
-        props.handleServerError(err);
-        return false;
-      });
-  });
+        .catch((err) => {
+          props.handleServerError(err);
+          return false;
+        });
+    },
+    [],
+  );
 
-  const updateSwiperHeight = (swiper) => {
+  const updateSwiperHeight = (swiper: SwiperClass) => {
     if (swiper) {
       try {
         swiper.updateAutoHeight(10);
@@ -1287,7 +1433,7 @@ const CharacterChat = (props) => {
   };
 
   /* Annotable candidates have annotation buttons (e.g., like, dislike). */
-  const markAsAnnotatable = (candidates) => {
+  const markAsAnnotatable = (candidates: ChatMessageCandidates[]) => {
     for (const candidate of candidates) {
       candidate.annotatable = true;
     }
@@ -1295,7 +1441,7 @@ const CharacterChat = (props) => {
 
   const handleGenerationCompleted = () => {
     speechMatchBeingProcessed = false;
-    recognition.start();
+    recognition?.start();
   };
 
   const cleanupAfterChatTurn = () => {
@@ -1306,7 +1452,7 @@ const CharacterChat = (props) => {
     setTranslateTapToggle(false);
   };
 
-  const allCandidatesHaveIds = (candidates) => {
+  const allCandidatesHaveIds = (candidates: ChatMessageCandidates[]) => {
     if (!candidates) {
       return false;
     }
@@ -1330,7 +1476,10 @@ const CharacterChat = (props) => {
     }
   };
 
-  const populateMissingCandidatesIds = (candidates, fake_id) => {
+  const populateMissingCandidatesIds = (
+    candidates: ChatMessageCandidates[],
+    fake_id: number,
+  ) => {
     for (const candidate of candidates) {
       if (!candidate.id) {
         candidate.id = fake_id;
@@ -1352,13 +1501,16 @@ const CharacterChat = (props) => {
     }
   };
 
-  const shouldAbortChatRequest = (generatingCandidates) =>
+  const shouldAbortChatRequest = (generatingCandidates: boolean) =>
     abortPrevChatRequestRef.current &&
     generatingCandidateRef.current &&
     generatingCandidates;
 
   // add the user message now
-  const sendChatStreaming = async (isProactive, generatingCandidates) => {
+  const sendChatStreaming = async (
+    isProactive: boolean,
+    generatingCandidates = false,
+  ) => {
     if (generatingCandidates) {
       setGeneratingCandidate(true);
     }
@@ -1369,9 +1521,9 @@ const CharacterChat = (props) => {
     }
 
     const rankingMethod = 'random'; // can be "random" or "classifier"n
-    let body = JSONbigNative.stringify({
-      history_external_id: history.external_id,
-      character_external_id: isRoom() ? '' : charData.external_id,
+    const body = JSONbigNative.stringify({
+      history_external_id: history?.external_id,
+      character_external_id: isRoom() ? '' : charData?.external_id,
       text: isProactive ? null : text,
       tgt: getCharParticipantUserName(),
       ranking_method: rankingMethod,
@@ -1415,7 +1567,8 @@ const CharacterChat = (props) => {
     }
 
     const url = axios.defaults.baseURL + '/chat/streaming/';
-    let data = null;
+    //#NOTE WOULD BE NICE TO HAVE A TYPE HERE
+    let data: any = null;
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -1427,7 +1580,7 @@ const CharacterChat = (props) => {
       });
 
       setNumStreamedMessages((prev) => prev + 1);
-      const reader = response.body.getReader();
+      const reader = response?.body?.getReader();
 
       let decoded_value = '';
       let first_iteration = true;
@@ -1441,7 +1594,7 @@ const CharacterChat = (props) => {
 
       let streamingChatError = false;
 
-      while (true) {
+      while (true && !!reader) {
         // Abort previous request generating candidate request if a new request was made
         if (shouldAbortChatRequest(generatingCandidates)) {
           // console.log('ABORTING CHAT');
@@ -1450,7 +1603,7 @@ const CharacterChat = (props) => {
 
         // done  - true if the stream has already given you all its data.
         // value - some data. Always undefined when done is true.
-        let { value, done } = await reader.read();
+        const { value, done } = await reader.read();
         if (done) {
           break;
         }
@@ -1461,7 +1614,7 @@ const CharacterChat = (props) => {
           // Check whether the user isn't allowed to chat.
           // Note(irwan): Couldn't get it to work outside of this while loop unfortunately.
           try {
-            let first_parsed_value = JSONbigNative.parse(decoded_value);
+            const first_parsed_value = JSONbigNative.parse(decoded_value);
             if (first_parsed_value?.force_login) {
               // Note(irwan): This should be refactored as it is actually confusing.
               // Lazy users are not authenticated on the front-end (isAuthenticated is false)
@@ -1475,6 +1628,8 @@ const CharacterChat = (props) => {
         }
         first_iteration = false;
         let chunk_count = 0;
+
+        // eslint-disable-next-line no-constant-condition
         while (true) {
           if (++iteration > max_iterations) {
             throw 'Too many iterations';
@@ -1699,7 +1854,7 @@ const CharacterChat = (props) => {
           setNegativeLabels(data.replies[0]);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       if (user?.user?.is_staff) {
         console.error(err);
       }
@@ -1725,7 +1880,10 @@ const CharacterChat = (props) => {
     }
   };
 
-  const hasCandidateErrors = (replies, generatingCandidates) => {
+  const hasCandidateErrors = (
+    replies: ChatMessageCandidates[],
+    generatingCandidates: boolean,
+  ) => {
     if (generatingCandidates) {
       return false;
     } else {
@@ -1733,7 +1891,7 @@ const CharacterChat = (props) => {
     }
   };
 
-  const updateLatestCandidate = (candidate) => {
+  const updateLatestCandidate = (candidate: ChatMessageCandidates) => {
     // If we are generating candidates, these should get appended to the last character message
     setViewMsgs((oldArray) => {
       const updatedViewMsgs = [...oldArray];
@@ -1745,7 +1903,7 @@ const CharacterChat = (props) => {
   };
 
   const edit = () => {
-    navigate(`/editing${buildUrlParams({ char: charData.external_id })}`);
+    navigate(`/editing${buildUrlParams({ char: charData?.external_id })}`);
   };
 
   const clearChat = () => {
@@ -1759,7 +1917,7 @@ const CharacterChat = (props) => {
   };
 
   const otherChats = () => {
-    navigate(`/histories${buildUrlParams({ char: charData.external_id })}`);
+    navigate(`/histories${buildUrlParams({ char: charData?.external_id })}`);
   };
 
   // unique name the server wants to id char participant
@@ -1774,18 +1932,18 @@ const CharacterChat = (props) => {
   };
 
   // name char uses for chat
-  const getCharName = (msg) => {
+  const getCharName = (msg: ChatViewMessage) => {
     return msg.srcChar?.participant.name;
   };
 
-  const handleChange = (event) => {
+  const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(event.target.value);
     if (!waiting) {
       resetProactiveTimer();
     }
   };
 
-  const hasAnnotation = (candidate) => {
+  const hasAnnotation = (candidate: ChatMessageCandidates) => {
     return (
       typeof candidate.three_star !== 'undefined' ||
       typeof candidate.four_star !== 'undefined' ||
@@ -1794,7 +1952,7 @@ const CharacterChat = (props) => {
     );
   };
 
-  const setAllCandsToNegative = async (candidates) => {
+  const setAllCandsToNegative = async (candidates: ChatMessageCandidates[]) => {
     if (candidates && candidates.length > 0) {
       for (const candidate of candidates) {
         // no parallelization to reduce calls.
@@ -1814,11 +1972,11 @@ const CharacterChat = (props) => {
   };
 
   useEffect(() => {
-    function handleKeyDown(e) {
+    function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'ArrowLeft') {
-        swiper.slidePrev();
+        swiper?.slidePrev();
       } else if (e.key === 'ArrowRight') {
-        swiper.slideNext();
+        swiper?.slideNext();
       }
     }
 
@@ -1829,7 +1987,7 @@ const CharacterChat = (props) => {
     };
   }, [swiper]);
 
-  const handleKeyDown = (event) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!isMobile && event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSubmit();
@@ -1850,7 +2008,7 @@ const CharacterChat = (props) => {
     }
   };
 
-  const handleKeyUp = (event) => {
+  const handleKeyUp = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const textArea = resetTextInputHeight();
     if (textArea) {
       textArea.style.height = textArea.scrollHeight + 'px';
@@ -1863,9 +2021,9 @@ const CharacterChat = (props) => {
     }
   };
 
-  const handleTextInputFocus = (event) => {
-    if (charData.name === 'SamuraiRobot') {
-      document.getElementById('char-background').play();
+  const handleTextInputFocus = () => {
+    if (charData?.name === 'SamuraiRobot') {
+      (document.getElementById('char-background') as HTMLVideoElement)?.play();
     }
     // TODO try to play song here as well.
   };
@@ -1888,7 +2046,7 @@ const CharacterChat = (props) => {
     }
   };
 
-  const getLabelId = (labelName) => {
+  const getLabelId = (labelName: string) => {
     if (Constants.IS_LOCAL) {
       switch (labelName) {
         // Text annotations.
@@ -1933,6 +2091,8 @@ const CharacterChat = (props) => {
           return 66;
         case 'image_not_five_star':
           return 67;
+        default:
+          return 0;
       }
     } else {
       switch (labelName) {
@@ -1977,11 +2137,17 @@ const CharacterChat = (props) => {
           return 276;
         case 'image_not_five_star':
           return 277;
+        default:
+          return 0;
       }
     }
   };
 
-  const updateLabels = async (candidate, labelIds, successCallback) => {
+  const updateLabels = async (
+    candidate: ChatMessageCandidates,
+    labelIds: number[],
+    // successCallback, //#NOTE UNUSED
+  ) => {
     const request = {
       message_id: candidate.id,
       assignment_id: null,
@@ -1990,11 +2156,11 @@ const CharacterChat = (props) => {
     };
     await axios
       .put('/chat/annotations/label/', JSONbigNative.stringify(request), getHeaders())
-      .then((response) => {
-        if (successCallback) {
-          successCallback();
-        }
-      })
+      //   .then((_response) => { //#NOTE UNUSED
+      //     if (successCallback) {
+      //       successCallback();
+      //     }
+      //   })
       .catch((err) => {
         if (user?.user?.is_staff) {
           console.error(err);
@@ -2002,7 +2168,7 @@ const CharacterChat = (props) => {
       });
   };
 
-  const setNegativeLabels = async (candidate) => {
+  const setNegativeLabels = async (candidate: ChatMessageCandidates) => {
     if (hasAnnotation(candidate)) {
       return;
     }
@@ -2034,25 +2200,32 @@ const CharacterChat = (props) => {
     candidate.image_four_star = false;
   };
 
-  const toggleAnnotation = (candidate, annotationType, prefix) => {
+  const toggleAnnotation = (
+    candidate: ChatMessageCandidates,
+    annotationType: string,
+    prefix: string,
+  ) => {
     if (!candidate.id) {
       return;
     }
     annotationType = prefix + annotationType;
-    if (!candidate[annotationType]) {
-      candidate[annotationType] = true;
+    if (!candidate[annotationType as keyof ChatMessageCandidates]) {
+      candidate[annotationType as keyof ChatMessageCandidates] = true;
     } else {
-      candidate[annotationType] = !candidate[annotationType];
+      candidate[annotationType as keyof ChatMessageCandidates] =
+        !candidate[annotationType as keyof ChatMessageCandidates];
     }
 
     const allRatings = ['one_star', 'two_star', 'three_star', 'four_star'];
 
-    if (candidate[annotationType]) {
+    if (candidate[annotationType as keyof ChatMessageCandidates]) {
       // Turn off the other annotations.
       for (const otherAnnotationType of allRatings) {
         const prefixedOtherAnnotationType = prefix + otherAnnotationType;
         if (prefixedOtherAnnotationType !== annotationType) {
-          candidate[prefixedOtherAnnotationType] = false;
+          candidate[
+            prefixedOtherAnnotationType as keyof ChatMessageCandidates
+          ] = false;
         }
       }
     }
@@ -2066,7 +2239,9 @@ const CharacterChat = (props) => {
     // we will update the annotations for the message in case to good!, not_bad,
     // and not_ugly.
     for (const annotationType of allRatings) {
-      if (candidate[`${prefix}${annotationType}`]) {
+      if (
+        candidate[`${prefix}${annotationType}` as keyof ChatMessageCandidates]
+      ) {
         labelIds.push(getLabelId(`${prefix}${annotationType}`));
       } else {
         labelIds.push(getLabelId(`${prefix}not_${annotationType}`));
@@ -2083,8 +2258,8 @@ const CharacterChat = (props) => {
         candidate.four_star)
     ) {
       const msg_request = {
-        char_id: charData.external_id,
-        char_name: charData.name,
+        char_id: charData?.external_id,
+        char_name: charData?.name,
       };
 
       // we dont care about the response to this request
@@ -2095,7 +2270,10 @@ const CharacterChat = (props) => {
     }
   };
 
-  const annotationButtons = (candidate, prefix) => {
+  const annotationButtons = (
+    candidate: ChatMessageCandidates,
+    prefix: string,
+  ) => {
     if (!candidate.annotatable) {
       return;
     }
@@ -2103,7 +2281,7 @@ const CharacterChat = (props) => {
     const charAccent = '#138eed';
     const negativeAnnotationStyle = { filter: 'grayscale(90%)' };
 
-    const labelMap = {
+    const labelMap: Record<string, string> = {
       one_star: 'Terrible',
       two_star: 'Bad',
       three_star: 'Good',
@@ -2112,12 +2290,14 @@ const CharacterChat = (props) => {
 
     const allRatings = ['one', 'two', 'three', 'four'];
 
-    const isRated = (rating) => {
-      return candidate[`${prefix}${rating}_star`];
+    const isRated = (rating: string) => {
+      return candidate[
+        `${prefix}${rating}_star` as keyof ChatMessageCandidates
+      ];
     };
 
-    const makeLabelString = (label) => {
-      var visibility;
+    const makeLabelString = (label: string) => {
+      let visibility;
       if (!label) {
         // Create a hidden fake label to prevent the stars from shifting position when the real label causes extra padding on mobile due to text wrapping.
         label = labelMap.four_star;
@@ -2125,8 +2305,8 @@ const CharacterChat = (props) => {
       } else {
         visibility = 'visible';
       }
-      var labelString;
-      if (charData.img_gen_enabled) {
+      let labelString;
+      if (charData?.img_gen_enabled) {
         const modality = prefix == '' ? 'Text' : 'Image';
         labelString = `${modality} was ${label}`;
       } else {
@@ -2136,7 +2316,7 @@ const CharacterChat = (props) => {
     };
 
     const displayAnnotationLabel = () => {
-      var label = '';
+      let label = '';
       for (const rating of allRatings) {
         if (isRated(rating)) {
           label = labelMap[`${rating}_star`];
@@ -2145,15 +2325,20 @@ const CharacterChat = (props) => {
       }
       const [labelString, visibility] = makeLabelString(label);
       return (
-        <div style={{ marginLeft: 5, visibility: visibility }}>
+        <div
+          style={{
+            marginLeft: 5,
+            visibility: visibility as 'hidden' | 'visible' | 'collapse',
+          }}
+        >
           {labelString}
         </div>
       );
     };
 
-    const starIsOn = (rating) => {
+    const starIsOn = (rating: string) => {
       const ratingIndex = allRatings.indexOf(rating);
-      for (var i = ratingIndex; i < allRatings.length; i++) {
+      for (let i = ratingIndex; i < allRatings.length; i++) {
         if (isRated(allRatings[i])) {
           return true;
         }
@@ -2161,7 +2346,7 @@ const CharacterChat = (props) => {
       return false;
     };
 
-    const createButtonForRating = (rating) => {
+    const createButtonForRating = (rating: string) => {
       const label = labelMap[`${rating}_star`];
       return (
         <button
@@ -2214,7 +2399,10 @@ const CharacterChat = (props) => {
     );
   };
 
-  const maybeRemoveImagePrompt = (candidate, isLastMessage) => {
+  const maybeRemoveImagePrompt = (
+    candidate: ChatMessageCandidates,
+    isLastMessage: boolean,
+  ) => {
     // remove the prompt to the image gen
     // only removes the first, since that's what server is doing now
     // don't remove during creation example chats
@@ -2223,16 +2411,16 @@ const CharacterChat = (props) => {
     } else {
       return stripImagePromptText(
         candidate,
-        charData.img_gen_enabled,
-        charData.strip_img_prompt_from_msg,
+        charData?.img_gen_enabled,
+        charData?.strip_img_prompt_from_msg,
         waiting,
         isLastMessage,
-        charData.img_prompt_regex,
+        charData?.img_prompt_regex,
       );
     }
   };
 
-  const preventAutoNumbering = (candidate) => {
+  const preventAutoNumbering = (candidate: ChatMessageCandidates) => {
     // text starts with a number followed by period
     if (/^\s*\d+\./.test(candidate.text)) {
       candidate.text = candidate.text.replace('.', '\\.');
@@ -2240,23 +2428,23 @@ const CharacterChat = (props) => {
     return candidate;
   };
 
-  const maybeTranslate = (candidate) => {
+  const maybeTranslate = (candidate: ChatMessageCandidates) => {
     if (
       translateCandidates &&
       (translateTapToggle || !translateTap) &&
       candidate.translation &&
       candidate.text.toLowerCase().trim() !==
-        candidate.translation.toLowerCase().trim()
+      candidate.translation.toLowerCase().trim()
     ) {
-      let label = translateTap ? '' : 'Translation: ';
+      const label = translateTap ? '' : 'Translation: ';
       candidate.text = `${candidate.text}\n\n${label}*${candidate.translation}*`;
     }
     return candidate;
   };
 
   const renderCandidate = (
-    candidate,
-    isChar,
+    candidate: ChatMessageCandidates,
+    isChar: boolean,
     isLastMessage = false,
     translate = false,
   ) => {
@@ -2278,7 +2466,7 @@ const CharacterChat = (props) => {
     );
   };
 
-  const maybeRenderSuggestedReplies = (candidate) => {
+  const maybeRenderSuggestedReplies = (candidate: ChatMessageCandidates) => {
     if (
       !candidate.suggested_replies ||
       candidate.suggested_replies.length === 0
@@ -2294,19 +2482,22 @@ const CharacterChat = (props) => {
     );
   };
 
-  const canRenderAnnotations = (user) => {
+  const canRenderAnnotations = (user?: Participant) => {
     return !isRoom() && !isAnonymousUser(user);
   };
 
-  const renderImage = (candidate, user) => {
+  const renderImage = (
+    candidate: ChatMessageCandidates,
+    user?: Participant,
+  ) => {
     const imagePath = candidate.image_rel_path;
 
     const renderImageAnnotations = () => {
-      if (errorImagePaths.includes(imagePath)) {
+      if (errorImagePaths.includes(imagePath ?? '')) {
         return <></>;
       }
       const visibility =
-        charMessageFullyRendered && loadedImagePaths.includes(imagePath)
+        charMessageFullyRendered && loadedImagePaths.includes(imagePath ?? '')
           ? 'visible'
           : 'hidden';
 
@@ -2324,13 +2515,15 @@ const CharacterChat = (props) => {
     return (
       <>
         <EmbeddedImage
-          imagePath={imagePath}
+          imagePath={imagePath ?? ''}
           errorImagePaths={errorImagePaths}
           setErrorImagePaths={setErrorImagePaths}
           loadedImagePaths={loadedImagePaths}
           setLoadedImagePaths={setLoadedImagePaths}
           handleImageLoad={() => {
-            updateSwiperHeight(swiper);
+            if (swiper) {
+              updateSwiperHeight(swiper);
+            }
             scrollToBottom();
           }}
         />
@@ -2340,22 +2533,23 @@ const CharacterChat = (props) => {
   };
 
   const renderMsgBalloon = (
-    msg,
-    idx,
-    candidate,
-    isPrimary,
+    msg: ChatViewMessage,
+    idx: number,
+    candidate: ChatMessageCandidates,
+    isPrimary: boolean,
     isTyping = false,
     showTranslationIfTap = false,
     isLastMessage = false,
-    styleDefaults = null,
+    styleDefaults: React.CSSProperties | null = null,
   ) => {
     const msgClassNames = ['msg'];
     const markdownClassNames = ['markdown-wrapper'];
     if (charData?.name === 'SamuraiRobot') {
       msgClassNames.push('msg-dark-bg');
     }
-    const styles = styleDefaults || {};
-    if (deleteMessageMode && deleteMessagesIds.includes(candidate.id)) {
+    const styles: React.CSSProperties = styleDefaults || {};
+    //#NOTE ?? 0 because id is nullable
+    if (deleteMessageMode && deleteMessagesIds.includes(candidate.id ?? 0)) {
       styles.background = '#f55b53d9';
     }
 
@@ -2372,16 +2566,18 @@ const CharacterChat = (props) => {
                   width: 20,
                   height: 20,
                 }}
-                checked={deleteMessagesIds.includes(msg.candidates[0].id)}
+                checked={deleteMessagesIds.includes(
+                  msg?.candidates[0]?.id ?? 0,
+                )}
                 onClick={() => clickMessageForDelete(idx)}
               />
             </div>
           )}
           <div className="col-auto p-0">
             {showAvatar(
-              user.user.account?.name,
+              user?.user?.account?.name ?? '',
               avatarSize,
-              user.user.account?.avatar_file_name,
+              user?.user?.account?.avatar_file_name ?? '',
             )}
           </div>
           <div className={`${deleteMessageMode ? 'col-8' : 'col-10'} p-2 pt-0`}>
@@ -2395,7 +2591,7 @@ const CharacterChat = (props) => {
                   alignItems: 'center',
                 }}
               >
-                {user.name}
+                {user?.name}
                 {candidate?.badge_reason && (
                   <CharacterIcon
                     msg={msg}
@@ -2408,7 +2604,9 @@ const CharacterChat = (props) => {
             </div>
             <div>
               <div className="col">
-                <div key={msg.id} className={msgClassNames.join(' ')}>
+                {/* //#NOTE  CHATVIEWMESSAGE DOESNT APPEAR TO HAVE AN EVER ASSIGNED*/}
+                {/* <div key={msg.id} className={msgClassNames.join(' ')}> */}
+                <div className={msgClassNames.join(' ')}>
                   <div className={markdownClassNames.join(' ')}>
                     {/* if candidate.text is a number followed by a period "2012."
                         markdown turns it into a 1. (perhaps interpretting as a number?)
@@ -2434,7 +2632,7 @@ const CharacterChat = (props) => {
       }
     }
 
-    const stuff = {};
+    const stuff: Record<string, any> = {};
     if (!candidate) {
       return null;
     }
@@ -2474,8 +2672,8 @@ const CharacterChat = (props) => {
       stuff['query'] = candidate.query;
     }
 
-    if (candidate.image_prompt) {
-      stuff['image_prompt'] = candidate.image_prompt;
+    if (candidate.image_prompt_text) {
+      stuff['image_prompt_text'] = candidate.image_prompt_text;
     }
     if (candidate.image_rel_path) {
       stuff['image_rel_path'] = candidate.image_rel_path;
@@ -2483,13 +2681,13 @@ const CharacterChat = (props) => {
 
     // TODO(daniel): make sure marked-react is safe
     // https://github.com/character-tech/character-tech/issues/396
-    const shouldCollapse = function (field) {
+    const shouldCollapse = function (_field: any) {
       return true;
     };
     const typyingDotClassNames = classNames({
       'typing-dot': true,
-      'typing-dot-dark-bg': charData.name === 'SamuraiRobot',
-      'typing-dot-light-bg': charData.name !== 'SamuraiRobot',
+      'typing-dot-dark-bg': charData?.name === 'SamuraiRobot',
+      'typing-dot-light-bg': charData?.name !== 'SamuraiRobot',
     });
     return (
       <div className="row p-0 m-0" style={styles}>
@@ -2541,14 +2739,16 @@ const CharacterChat = (props) => {
           )}
           <div>
             <div className="col">
-              <div key={msg.id} className={msgClassNames.join(' ')}>
+              {/* //#NOTE  CHATVIEWMESSAGE DOESNT APPEAR TO HAVE AN EVER ASSIGNED*/}
+              <div className={msgClassNames.join(' ')}>
+                {/* <div key={msg.id} className={msgClassNames.join(' ')}> */}
                 {isTyping ? (
                   <React.Fragment>
-                    <span> </span>
+                    <span />
                     <span className={typyingDotClassNames}></span>
                     <span className={typyingDotClassNames}></span>
                     <span className={typyingDotClassNames}></span>
-                    <span> </span>
+                    <span />
                   </React.Fragment>
                 ) : (
                   <div style={{ maxWidth: '100%' }}>
@@ -2560,7 +2760,7 @@ const CharacterChat = (props) => {
                         candidate,
                         true,
                         isLastMessage,
-                        translateTap && !showTranslationIfTap,
+                        !!translateTap && !showTranslationIfTap,
                       )}
                     </div>
                     {/* Rooms has the livetune buttons disappearing and moving around.
@@ -2607,6 +2807,7 @@ const CharacterChat = (props) => {
   const createDummyMessageForNewCandidate = () => {
     const updatedViewMsgs = [...viewMsgs];
 
+    //#NOTE ANOTHER ONE OF THESE DUMMY MESSAGES WHAT
     updatedViewMsgs[updatedViewMsgs.length - 1].candidates.push({
       text: '...',
       debug_info: {},
@@ -2614,11 +2815,15 @@ const CharacterChat = (props) => {
     setViewMsgs(updatedViewMsgs);
   };
 
-  const renderSlides = (msg, i, isLastMessage) => {
+  const renderSlides = (
+    msg: ChatViewMessage,
+    i: number,
+    isLastMessage: boolean,
+  ) => {
     const slides = [];
 
     // Don't render additional slides until first one is fully rendered
-    let max = charMessageFullyRendered ? msg.candidates.length : 1;
+    const max = charMessageFullyRendered ? msg.candidates.length : 1;
 
     for (let index = 0; index < max; index++) {
       let renderedMsg;
@@ -2651,20 +2856,27 @@ const CharacterChat = (props) => {
     return slides;
   };
 
-  const markCandidateAsSeen = (candidate) => {
+  const markCandidateAsSeen = (candidate: ChatMessageCandidates) => {
     if (
-      seenCandidateIds.includes(candidate.id) ||
+      (candidate && candidate.id && seenCandidateIds.includes(candidate.id)) ||
       !candidate.id ||
       candidate.id < 1
     ) {
       return;
     }
 
-    setSeenCandidateIds((prev) => [...prev, candidate.id]);
+    const { id } = candidate;
+    if (id) {
+      setSeenCandidateIds((prev) => [...prev, id]);
+    }
   };
 
-  const renderCandidates = (msg, i, isLastMessage) => {
-    function changePrimary(index) {
+  const renderCandidates = (
+    msg: ChatViewMessage,
+    i: number,
+    isLastMessage: boolean,
+  ) => {
+    function changePrimary(index: number) {
       setAltIndex(index);
       if (index >= 0 && index < msg.candidates.length) {
         const c = msg.candidates[index];
@@ -2726,8 +2938,9 @@ const CharacterChat = (props) => {
 
     return (
       <Swiper
-        onSwiper={setSwiper}
-        index={altIndex}
+        onSwiper={(swiper: SwiperClass) => setSwiper(swiper)}
+        // index property does not exist on Swiper
+        // index={altIndex}
         onSlideChange={(s) => changePrimary(s.activeIndex)}
         slidesPerView={1}
         autoHeight
@@ -2749,15 +2962,15 @@ const CharacterChat = (props) => {
       }
       return;
     }
-    const newDevToolsEnabled = user?.user?.is_staff && !devToolsEnabled;
+    const newDevToolsEnabled = !!(user?.user?.is_staff && !devToolsEnabled);
     setDevToolsEnabled(newDevToolsEnabled);
-    localStorage.setItem('devToolsEnabled', newDevToolsEnabled);
+    localStorage.setItem('devToolsEnabled', '' + newDevToolsEnabled);
     if (newDevToolsEnabled) {
       //console.log(viewMsgsToDefintion())
     }
   };
 
-  const handlePostVisibilityChange = (selectedItem) => {
+  const handlePostVisibilityChange = (selectedItem: Option) => {
     setPostVisibility(selectedItem);
   };
 
@@ -2779,8 +2992,9 @@ const CharacterChat = (props) => {
 
     setDeletingMessages(true);
     const response = await API.deleteMessages(
-      history.external_id,
+      history?.external_id ?? '',
       deleteMessagesIds,
+      false,
     );
 
     if (response.status === 'OK') {
@@ -2802,7 +3016,7 @@ const CharacterChat = (props) => {
     }
   };
 
-  const createPost = async (keepPrivate = true) => {
+  const createPost = async (_keepPrivate = true) => {
     await updatePrimaryToCorrectCandidate();
     return axios
       .post(
@@ -2810,12 +3024,12 @@ const CharacterChat = (props) => {
         {
           post_title: postTitle,
           post_visibility: postVisibility.value,
-          subject_external_id: history.external_id,
+          subject_external_id: history?.external_id,
           post_message_start: postStartMessageIndex,
           post_message_end: postEndMessageIndex,
           post_num_messages_loaded: viewMsgs.length,
         },
-        getHeaders(props),
+        getHeaders(),
       )
       .then((response) => {
         if (response.data.post && response.data.post.external_id) {
@@ -2837,16 +3051,16 @@ const CharacterChat = (props) => {
       });
   };
 
-  const createSharingVideo = async (externalId) => {
-    return axios
-      .post('/chat/chat-post/video/create/', {
-        external_id: externalId,
-      })
-      .catch((err) => {
-        props.handleServerError(err);
-        return false;
-      });
-  };
+  // const createSharingVideo = async (externalId: string) => {
+  //   return axios
+  //     .post('/chat/chat-post/video/create/', {
+  //       external_id: externalId,
+  //     })
+  //     .catch((err) => {
+  //       props.handleServerError(err);
+  //       return false;
+  //     });
+  // };
 
   const handleCreatePost = async () => {
     closePostCreationModal();
@@ -2855,7 +3069,10 @@ const CharacterChat = (props) => {
     setPostEndMessageIndex(null);
   };
 
-  const renderTitle = (history, charData) => {
+  const renderTitle = (
+    history?: ChatHistoryCreateContinueResponse,
+    charData?: Character,
+  ) => {
     return (
       <button
         className="col-auto btn p-0"
@@ -2872,17 +3089,17 @@ const CharacterChat = (props) => {
                 history?.room_img_gen_enabled || charData?.img_gen_enabled
               }
             />
-            {history.title ? '#' : ''}
-            {history.title || charData?.participant__name}
+            {history?.title ? '#' : ''}
+            {history?.title || charData?.participant__name}
             {!isRoom() && (
               <>
-                {charData.visibility === 'PRIVATE' && (
+                {charData?.visibility === 'PRIVATE' && (
                   <MdLock size={18} className="mb-1" />
                 )}
-                {charData.visibility === 'UNLISTED' && (
+                {charData?.visibility === 'UNLISTED' && (
                   <MdLink size={18} className="mb-1" />
                 )}
-                {!loading && charData.visibility === 'PUBLIC' && (
+                {!loading && charData?.visibility === 'PUBLIC' && (
                   <span
                     className="text-secondary"
                     style={{ fontWeight: 400, fontSize: 12 }}
@@ -2902,7 +3119,7 @@ const CharacterChat = (props) => {
     );
   };
 
-  const renderParticipants = (history) => {
+  const renderParticipants = (history: ChatHistoryCreateContinueResponse) => {
     return (
       history.avatars && (
         <div className="col-auto">
@@ -2916,15 +3133,15 @@ const CharacterChat = (props) => {
                 >
                   {avatar.character__avatar_file_name
                     ? showAvatar(
-                        avatar.name,
-                        avatarSize / 2,
-                        avatar.character__avatar_file_name,
-                      )
+                      avatar.name,
+                      avatarSize / 2,
+                      avatar.character__avatar_file_name,
+                    )
                     : showAvatar(
-                        avatar.name,
-                        avatarSize / 2,
-                        avatar.user__account__avatar_file_name,
-                      )}
+                      avatar.name,
+                      avatarSize / 2,
+                      avatar.user__account__avatar_file_name ?? '',
+                    )}
                 </div>
               ))}
             {history.avatars &&
@@ -2942,21 +3159,25 @@ const CharacterChat = (props) => {
   const canViewCharacterSettings = () => {
     return (
       charData &&
-      ((user.user?.username &&
+      ((user?.user?.username &&
         charData?.user__username === user.user.username) ||
         charData.copyable) &&
       !viewOnly
     );
   };
 
-  const isRoom = () => history.type === 'ROOM';
+  const isRoom = () => history?.type === 'ROOM';
 
-  const pauseConversation = (event) => {
+  const pauseConversation = (
+    event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+  ) => {
     event.preventDefault();
     setIsPaused(true);
   };
 
-  const resumeConversation = (event) => {
+  const resumeConversation = (
+    event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+  ) => {
     event.preventDefault();
     setIsPaused(false);
   };
@@ -2983,8 +3204,11 @@ const CharacterChat = (props) => {
     );
   };
 
-  const renderTitleAndParticipants = (history, charData) => {
-    if (isRoom() && history.avatars) {
+  const renderTitleAndParticipants = (
+    history?: ChatHistoryCreateContinueResponse,
+    charData?: Character,
+  ) => {
+    if (isRoom() && history?.avatars) {
       return (
         <div className="row">
           {renderTitle(history, charData)}
@@ -2995,7 +3219,7 @@ const CharacterChat = (props) => {
     return renderTitle(history, charData);
   };
 
-  let typingMessage = {
+  const typingMessage = {
     key: 100000,
     isCharTurn: true,
     text: '...',
@@ -3003,8 +3227,8 @@ const CharacterChat = (props) => {
   };
   const msgRowClassNames = classNames({
     'msg-row': true,
-    'msg-row-light-bg': charData.name !== 'SamuraiRobot',
-    'msg-row-dark-bg': charData.name === 'SamuraiRobot',
+    'msg-row-light-bg': charData?.name !== 'SamuraiRobot',
+    'msg-row-dark-bg': charData?.name === 'SamuraiRobot',
   });
   const warningClassNames = classNames({
     'text-danger': true,
@@ -3012,22 +3236,22 @@ const CharacterChat = (props) => {
     'pb-1': false,
     'pt-2': false,
     'justify-content-between': false,
-    'chatheaderbg-immersive': charData.name === 'SamuraiRobot',
-    'chatheaderbg-normal': charData.name !== 'SamuraiRobot',
+    'chatheaderbg-immersive': charData?.name === 'SamuraiRobot',
+    'chatheaderbg-normal': charData?.name !== 'SamuraiRobot',
   });
   const headerClassNames = classNames({
     row: true,
     'pb-1': true,
     'pt-2': true,
     'justify-content-between': true,
-    'chatheaderbg-immersive': charData.name === 'SamuraiRobot',
-    'chatheaderbg-normal': charData.name !== 'SamuraiRobot',
+    'chatheaderbg-immersive': charData?.name === 'SamuraiRobot',
+    'chatheaderbg-normal': charData?.name !== 'SamuraiRobot',
     'align-items-center': true,
   });
   const footerClassNames = classNames({
     row: true,
-    'chatfooterbg-immersive': charData.name === 'SamuraiRobot',
-    'chatfooterbg-normal': charData.name !== 'SamuraiRobot',
+    'chatfooterbg-immersive': charData?.name === 'SamuraiRobot',
+    'chatfooterbg-normal': charData?.name !== 'SamuraiRobot',
   });
 
   const renderChatTop = () => {
@@ -3131,8 +3355,8 @@ const CharacterChat = (props) => {
                 <div className="col-3">
                   <button
                     className={
-                      (!charData.greeting && viewMsgs.length > 1) ||
-                      viewMsgs.length > 2
+                      (!charData?.greeting && viewMsgs.length > 1) ||
+                        viewMsgs.length > 2
                         ? 'btn border btn-primary'
                         : 'btn border'
                     }
@@ -3143,34 +3367,34 @@ const CharacterChat = (props) => {
                   </button>
                 </div>
               </div>
-              {((!charData.greeting && viewMsgs.length > 1) ||
+              {((!charData?.greeting && viewMsgs.length > 1) ||
                 viewMsgs.length > 2) && (
-                <div>
-                  <p className="text-muted" style={{ fontSize: '11pt' }}>
-                    Choose other responses by swiping {charData.name}'s last
-                    message.
-                  </p>
-                  <p className="text-muted" style={{ fontSize: '11pt' }}>
-                    <MdRestartAlt size={24} /> if you want to restart this chat
-                    to try again.
-                  </p>
-                  {!props.maxLength || currentLength <= props.maxLength ? (
-                    <span>
-                      {viewMsgs.length >= props.minimum && (
+                  <div>
+                    <p className="text-muted" style={{ fontSize: '11pt' }}>
+                      {`Choose other responses by swiping ${charData?.name}'s last
+                    message.`}
+                    </p>
+                    <p className="text-muted" style={{ fontSize: '11pt' }}>
+                      <MdRestartAlt size={24} /> if you want to restart this chat
+                      to try again.
+                    </p>
+                    {!props.maxLength || currentLength <= props.maxLength ? (
+                      <span>
+                        {viewMsgs.length >= (props.minimum || 0) && (
+                          <p className="" style={{ fontSize: '11pt' }}>
+                            {`You can move on any time you're ready.`}
+                          </p>
+                        )}
+                      </span>
+                    ) : (
+                      <span>
                         <p className="" style={{ fontSize: '11pt' }}>
-                          You can move on any time you're ready.
+                          {`You've reached the limit for this example chat.`}
                         </p>
-                      )}
-                    </span>
-                  ) : (
-                    <span>
-                      <p className="" style={{ fontSize: '11pt' }}>
-                        You've reached the limit for this example chat.
-                      </p>
-                    </span>
-                  )}
-                </div>
-              )}
+                      </span>
+                    )}
+                  </div>
+                )}
             </div>
           </div>
         ) : (
@@ -3204,15 +3428,15 @@ const CharacterChat = (props) => {
                           }}
                         >
                           <span>
-                            {history.description
+                            {history?.description
                               ? 'Talking about ' +
-                                history.description.slice(0, 30)
-                              : charData.title}
+                              history.description.slice(0, 30)
+                              : charData?.title}
                           </span>
                         </div>
                       )}
 
-                      {charData.external_id && (
+                      {charData?.external_id && (
                         <div className="p-0 m-0" style={{ fontSize: '13px' }}>
                           <span style={{ color: '#777777' }}>created by </span>
                           <Link
@@ -3223,23 +3447,23 @@ const CharacterChat = (props) => {
                             }}
                             role="button"
                             to={
-                              charData.user__username === user.user.username
+                              charData?.user__username === user?.user?.username
                                 ? {
-                                    pathname: `/profile/${buildUrlParams({
-                                      char: charData.external_id,
-                                    })}`,
-                                  }
+                                  pathname: `/profile/${buildUrlParams({
+                                    char: charData?.external_id,
+                                  })}`,
+                                }
                                 : {
-                                    pathname: `/public-profile/${buildUrlParams(
-                                      {
-                                        char: charData.external_id,
-                                        username: charData.user__username,
-                                      },
-                                    )}`,
-                                  }
+                                  pathname: `/public-profile/${buildUrlParams(
+                                    {
+                                      char: charData?.external_id,
+                                      username: charData?.user__username,
+                                    },
+                                  )}`,
+                                }
                             }
                           >
-                            @{charData.user__username}
+                            @{charData?.user__username}
                           </Link>
                         </div>
                       )}
@@ -3255,9 +3479,11 @@ const CharacterChat = (props) => {
                       isAnonymousUser={isAnonymousUser(user)}
                       isRoom={isRoom()}
                       initiatePostCreation={!viewOnly && initiatePostCreation}
-                      clearChat={charData.external_id && !viewOnly && clearChat}
+                      clearChat={
+                        charData?.external_id && !viewOnly && clearChat
+                      }
                       viewArchivedChats={
-                        charData.external_id && hasHistories && otherChats
+                        charData?.external_id && hasHistories && otherChats
                       }
                       viewCharacterSettings={canViewCharacterSettings() && edit}
                       reportCharacter={
@@ -3268,7 +3494,9 @@ const CharacterChat = (props) => {
                       toggleDeleteMode={!viewOnly && enableDeleteMessageMode}
                       characterVoiceEnabled={characterVoiceEnabled}
                       toggleCharacterVoice={
-                        !viewOnly && window.audioContext && toggleCharacterVoice
+                        !viewOnly &&
+                        !!(window as any).audioContext &&
+                        toggleCharacterVoice
                       }
                     />
                   </div>
@@ -3375,12 +3603,12 @@ const CharacterChat = (props) => {
                   ) : (
                     <>
                       <div
-                        className={`chatbox text-muted d-flex justify-content-start align-items-center p-0 bg-white ${
-                          isMobile ? 'mx-1' : 'mx-3'
-                        }`}
+                        className={`chatbox text-muted d-flex justify-content-start align-items-center p-0 bg-white ${isMobile ? 'mx-1' : 'mx-3'
+                          }`}
                         style={isMobile ? { flex: 'auto' } : {}}
                       >
                         <ChatActions
+                          characterVoiceEnabled={false}
                           open={chatDropdownOpen}
                           toggle={() => setChatDropdownOpen(!chatDropdownOpen)}
                           openImageGenerationModal={() =>
@@ -3392,7 +3620,7 @@ const CharacterChat = (props) => {
                           waiting={waiting}
                         />
                         {userImagePath && (
-                          <div style={{ 'padding-left': '5px' }}>
+                          <div style={{ paddingLeft: '5px' }}>
                             <EmbeddedImage
                               imagePath={userImagePath}
                               imageSize={30}
@@ -3409,9 +3637,9 @@ const CharacterChat = (props) => {
                             style={{ fontSize: '11pt', paddingLeft: 4 }}
                             onChange={(event) => handleChange(event)}
                             onKeyDown={(event) => handleKeyDown(event)}
-                            onKeyUp={(event) => handleKeyUp(event)}
-                            onFocus={(event) => handleTextInputFocus(event)}
-                            rows="1"
+                            onKeyUp={handleKeyUp}
+                            onFocus={handleTextInputFocus}
+                            rows={1}
                             placeholder="Type a message"
                           />
                           <button
@@ -3475,13 +3703,13 @@ const CharacterChat = (props) => {
 
   const handleCopyLinkClick = () => {
     navigator.clipboard.writeText(
-      `${getShareUrlOrigin()}/c/${charData.external_id}`,
+      `${getShareUrlOrigin()}/c/${charData?.external_id}`,
     );
     toast('Link copied to clipboard');
   };
 
   const renderMsgs = () => {
-    const displayMessageForPost = (isStart, textCrop = 60) => {
+    const displayMessageForPost = (isStart: boolean, textCrop = 60) => {
       if (viewMsgs.length == 0) {
         return '';
       }
@@ -3490,7 +3718,7 @@ const CharacterChat = (props) => {
         : postEndMessageIndex || -1;
       const iOffset = i >= 0 ? i : viewMsgs.length + i;
       const msg = viewMsgs[iOffset];
-      const msgAuthor = msg.isCharTurn ? getCharName(msg) : user.name;
+      const msgAuthor = msg.isCharTurn ? getCharName(msg) : user?.name;
       const index = iOffset === viewMsgs.length - 1 ? altIndex : 0;
       const msgLabel = msg.candidates[index].text;
       const textLabel =
@@ -3502,14 +3730,14 @@ const CharacterChat = (props) => {
       return (
         <div
           style={{
-            'margin-top': '10px',
-            'margin-bottom': '5px',
-            'font-size': '13px',
+            marginTop: '10px',
+            marginBottom: '5px',
+            fontSize: '13px',
           }}
         >
           <div
             style={{
-              'font-weight': 'bold',
+              fontWeight: 'bold',
             }}
           >
             {prefix}:
@@ -3539,16 +3767,16 @@ const CharacterChat = (props) => {
         ) : (
           <Hotkeys keyName={'f2'} onKeyDown={() => toggleDevTools()}>
             <div>
-              {charData.name === 'SamuraiRobot' && (
+              {charData?.name === 'SamuraiRobot' && (
                 <video
                   id="char-background"
-                  autostart="true"
+                  //   autostart={true} //#NOTE this type does not exist on video
                   loop
                   muted
                   playsInline
                   autoPlay
                   src={`${Constants.CDN_URL}/static/videos/robot-samurai.mp4`}
-                  type="video/mp4"
+                  //   type="video/mp4" //#NOTE this type does not exist on video
                   onLoadedData={() => handleVideoLoaded()}
                 />
               )}
@@ -3571,7 +3799,7 @@ const CharacterChat = (props) => {
                       <InfiniteScroll
                         dataLength={viewMsgs.length}
                         next={loadMessages}
-                        hasMore={chatHasMore}
+                        hasMore={!!chatHasMore}
                         loader={<h4>Loading...</h4>}
                         scrollableTarget="scrollBar"
                         style={{
@@ -3640,18 +3868,23 @@ const CharacterChat = (props) => {
                 <div
                   style={{
                     display: 'flex',
-                    'flex-direction': 'column',
-                    'align-items': 'center',
+                    flexDirection: 'column',
+                    alignItems: 'center',
                   }}
                 >
-                  <div style={{ padding: '20px' }}>
-                    You're about to be prompted for access to your microphone.
+                  <div
+                    style={{ padding: '20px' }}
+                  >
+                    {`You're about to be prompted for access to your microphone.
                     Chatting with characters using your voice will only work, if
                     you allow access to your microphone. If access is granted,
                     the microphone will start listening continuously. Tap the
-                    microphone button (
-                    <MdSettingsVoice size={25} style={{ color: '#5fa6bbff' }} />
-                    ) again to make it stop listening.
+                    microphone button ${(
+                        <MdSettingsVoice
+                          size={25}
+                          style={{ color: '#5fa6bbff' }}
+                        />
+                      )} again to make it stop listening.`}
                   </div>
                   <button
                     onClick={closeMicModal}
@@ -3664,7 +3897,7 @@ const CharacterChat = (props) => {
 
               <Modal
                 isOpen={postCreationModalIsOpen}
-                onRequestClose={closePostCreationModal}
+                onRequestClose={() => closePostCreationModal()}
                 style={{
                   content: {
                     top: '50%',
@@ -3683,8 +3916,8 @@ const CharacterChat = (props) => {
                 <div
                   style={{
                     display: 'flex',
-                    'flex-direction': 'column',
-                    'align-items': isMobile ? 'center' : 'left',
+                    flexDirection: 'column',
+                    alignItems: isMobile ? 'center' : 'left',
                   }}
                 >
                   <div>
@@ -3694,10 +3927,10 @@ const CharacterChat = (props) => {
                           <div className="sec-header pb-2">Share Character</div>
                           <MdHighlightOff
                             style={{ height: 24, width: 24, cursor: 'pointer' }}
-                            onClick={closePostCreationModal}
+                            onClick={() => closePostCreationModal()}
                           />
                         </div>
-                        {charData.visibility === 'PRIVATE' ? (
+                        {charData?.visibility === 'PRIVATE' ? (
                           <div className="row justify-content-center align-items-center mt-4 mx-2">
                             <Alert color="primary">
                               This Character is private so sharing by link is
@@ -3717,9 +3950,8 @@ const CharacterChat = (props) => {
                               <input
                                 type="text"
                                 maxLength={40}
-                                value={`${getShareUrlOrigin()}/c/${
-                                  charData.external_id
-                                }`}
+                                value={`${getShareUrlOrigin()}/c/${charData?.external_id
+                                  }`}
                                 style={{
                                   fontSize: '16px',
                                   borderWidth: '0 0 1px 0',
@@ -3736,14 +3968,12 @@ const CharacterChat = (props) => {
                               </Button>
                             </div>
                             <div
-                              className={`mt-2 row ${
-                                isMobile ? 'w-100' : 'w-50'
-                              }`}
+                              className={`mt-2 row ${isMobile ? 'w-100' : 'w-50'
+                                }`}
                             >
                               <SocialSharePanel
-                                link={`${getShareUrlOrigin()}/c/${
-                                  charData.external_id
-                                }`}
+                                link={`${getShareUrlOrigin()}/c/${charData?.external_id
+                                  }`}
                                 shareTitle={
                                   'This AI will BLOW YOUR MIND 🤯 #characterai'
                                 }
@@ -3769,16 +3999,16 @@ const CharacterChat = (props) => {
                         <div className="row justify-content-start align-items-center">
                           <div className="col-auto pe-0">
                             {/* Lazy user has no name */}
-                            {showAvatar(
-                              user.user.account?.name,
-                              avatarSize,
-                              user.user.account?.avatar_file_name,
-                            )}
+                            {user &&
+                              showAvatar(
+                                user.user?.account?.name ?? '',
+                                avatarSize,
+                                user.user?.account?.avatar_file_name ?? '',
+                              )}
                           </div>
                           <div
-                            className={`${
-                              isMobile ? 'col' : 'col-auto'
-                            } align-items-center`}
+                            className={`${isMobile ? 'col' : 'col-auto'
+                              } align-items-center`}
                           >
                             <Dropdown
                               options={postVisibilityOptions}
@@ -3787,9 +4017,10 @@ const CharacterChat = (props) => {
                               }
                               value={postVisibility}
                               placeholder="Select an option"
-                              style={{
-                                width: isMobile ? '100%' : '200px',
-                              }}
+                            //#NOTE REACT-DROPDOWN DOES NOT SUPPORT STYLE
+                            //   style={{
+                            //     width: isMobile ? '100%' : '200px',
+                            //   }}
                             />
                           </div>
                         </div>
@@ -3798,11 +4029,10 @@ const CharacterChat = (props) => {
                           Post Title (Optional)
                         </div>
                         <div
-                          className={`row mb-2 w-100 ${
-                            isMobile
-                              ? 'justify-content-center'
-                              : 'justify-content-start'
-                          }`}
+                          className={`row mb-2 w-100 ${isMobile
+                            ? 'justify-content-center'
+                            : 'justify-content-start'
+                            }`}
                         >
                           <input
                             type="text"
@@ -3833,7 +4063,7 @@ const CharacterChat = (props) => {
                         {postStartMessageIndex == null ? (
                           <div
                             className="col-auto ps-0 pb-1"
-                            style={{ 'font-size': '14px', 'font-weight': 200 }}
+                            style={{ fontSize: '14px', fontWeight: 200 }}
                           >
                             By default the <b>whole</b> conversation is posted
                           </div>
@@ -3862,9 +4092,9 @@ const CharacterChat = (props) => {
 
                             {/* TODO: delete conditional rendering of empty div */}
                             {viewMsgs.length > 2 &&
-                            (postStartMessageIndex == null ||
-                              postEndMessageIndex == null ||
-                              postEndMessageIndex - postStartMessageIndex >
+                              (postStartMessageIndex == null ||
+                                postEndMessageIndex == null ||
+                                postEndMessageIndex - postStartMessageIndex >
                                 1) ? (
                               <div></div>
                             ) : (
@@ -3876,9 +4106,8 @@ const CharacterChat = (props) => {
                         )}
 
                         <div
-                          className={`${
-                            isMobile ? '' : 'row w-100 pt-4 justify-content-end'
-                          }`}
+                          className={`${isMobile ? '' : 'row w-100 pt-4 justify-content-end'
+                            }`}
                         >
                           <button
                             onClick={handleCreatePost}
@@ -3954,5 +4183,3 @@ const CharacterChat = (props) => {
     </div>
   );
 };
-
-export default CharacterChat;

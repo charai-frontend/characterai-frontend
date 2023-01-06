@@ -3,6 +3,7 @@ import React from 'react';
 import { useEffect, useState } from 'react';
 import { Modal, ModalBody } from 'reactstrap';
 
+import * as Constants from './Constants';
 import LoginButton from './LoginButton';
 import Waitlist from './Waitlist';
 import Logo from './components/Logo';
@@ -126,7 +127,12 @@ const LoginModal = (props) => {
   );
 
   return (
-    <Modal isOpen={loginOpen} backdrop toggle={!props.no_close && closeLogin}>
+    <Modal
+      isOpen={loginOpen}
+      backdrop
+      toggle={!props.no_close && closeLogin}
+      style={{ marginTop: Constants.NOTCH ? 50 : 0 }}
+    >
       <ModalBody>
         {showWaitList ? (
           <Waitlist

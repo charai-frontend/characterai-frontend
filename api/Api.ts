@@ -13,13 +13,13 @@ import {
   FeaturedCharacters,
   Followers,
   Following,
+  Participant,
   Post,
   PublicUser,
   ReceivedMessagesCount,
   Room,
   Scope,
   TrendingScores,
-  User,
   Voice,
   WaitListInfo,
 } from '../types';
@@ -50,7 +50,7 @@ setupAxios();
  * USER API
  */
 
-const fetchUser = async (): Promise<User> => {
+const fetchUser = async (): Promise<Participant> => {
   const response = await axios.get('/chat/user/');
   return response.data.user;
 };
@@ -252,7 +252,8 @@ const deleteMessages = async (
   historyId: string,
   ids: number[],
   regenerating: boolean,
-): Promise<boolean> => {
+  //todo: properly type this response
+): Promise<any> => {
   const response = await axios.post('/chat/history/msgs/delete/', JSONbigNative.stringify({
     history_id: historyId,
     ids_to_delete: ids,

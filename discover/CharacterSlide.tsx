@@ -1,20 +1,19 @@
 import React from 'react';
 import { isMobile } from 'react-device-detect';
-import { IoChatbubblesOutline } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardFooter } from 'reactstrap';
 
 import CharacterImage from '../components/CharacterImage';
 import ProfileLink from '../components/ProfileLink';
-import { Character, User } from '../types';
+import { Character, Participant } from '../types';
 import { buildUrlParams } from '../utils';
-import { displayNumInteractions, getCharMsg } from '../utils/character-utils';
+import { getCharMsg } from '../utils/character-utils';
 
 type CharacterSlideProps = {
   character: Character;
   selectCharacter: (character: Character) => void;
   numInteractions: number;
-  user: User;
+  user: Participant;
 };
 
 const CharacterSlide = ({

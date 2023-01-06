@@ -60,11 +60,11 @@ export const ProfileSettings = (props: ProfileSettingsProps) => {
   const validUsernameRegex = RegExp(/^[A-Za-z0-9_-]+$/i);
 
   useEffect(() => {
-    if (user?.user) {
+    if (user?.user?.account) {
       setFormData({
         //name: user.user.account.name,
         name: user.name,
-        username: user?.user?.username,
+        username: user.user.username,
         avatar_type: user.user.account.avatar_type,
         avatar_rel_path: user.user.account.avatar_file_name,
         acknowledgement: true,
@@ -109,25 +109,25 @@ export const ProfileSettings = (props: ProfileSettingsProps) => {
       case 'name':
         error =
           value.length < Constants.MIN_NAME_LEN ||
-          value.length > Constants.MAX_NAME_LEN ||
-          !validNameRegex.test(value)
+            value.length > Constants.MAX_NAME_LEN ||
+            !validNameRegex.test(value)
             ? 'Name must be ' +
-              Constants.MIN_NAME_LEN +
-              ' to ' +
-              Constants.MAX_NAME_LEN +
-              ' characters and contain only letters, numbers, underscore, dash and space'
+            Constants.MIN_NAME_LEN +
+            ' to ' +
+            Constants.MAX_NAME_LEN +
+            ' characters and contain only letters, numbers, underscore, dash and space'
             : '';
         break;
       case 'username':
         error =
           value.length < Constants.MIN_USERNAME_LEN ||
-          value.length > Constants.MAX_USERNAME_LEN ||
-          !validUsernameRegex.test(value)
+            value.length > Constants.MAX_USERNAME_LEN ||
+            !validUsernameRegex.test(value)
             ? 'Username must be ' +
-              Constants.MIN_USERNAME_LEN +
-              ' to ' +
-              Constants.MAX_USERNAME_LEN +
-              ' characters and contain only letters, numbers, underscore and dash'
+            Constants.MIN_USERNAME_LEN +
+            ' to ' +
+            Constants.MAX_USERNAME_LEN +
+            ' characters and contain only letters, numbers, underscore and dash'
             : '';
         break;
       default:
@@ -181,7 +181,7 @@ export const ProfileSettings = (props: ProfileSettingsProps) => {
 
   const showAvatar = () => {
     if (
-      user &&
+      user?.user?.account &&
       user.user.account.avatar_file_name !== '' &&
       !formData.avatar_rel_path
     ) {

@@ -1,7 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
-import React from 'react';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   MdAdd,
   MdArrowBackIosNew,
@@ -13,15 +11,13 @@ import {
   MdSaveAlt,
 } from 'react-icons/md';
 import Modal from 'react-modal';
-import { useNavigate } from 'react-router-dom';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Select from 'react-select';
-import { Button } from 'reactstrap';
 import { v4 as uuidv4 } from 'uuid';
 
 import './App.css';
 import CharacterCard from './CharacterCard';
-import CharacterChat from './CharacterChat';
+import { CharacterChatTyped } from './CharacterChatTyped';
 import './Chat.css';
 import './Common.css';
 import * as Constants from './Constants';
@@ -29,7 +25,6 @@ import './Creation.css';
 import API from './api/Api';
 import AvatarUpload from './components/AvatarUpload';
 import VoiceSelect from './components/VoiceSelect';
-import { buildUrlParams } from './utils';
 
 const CharacterEditor = (props) => {
   const navigate = useNavigate();
@@ -520,7 +515,7 @@ const CharacterEditor = (props) => {
         <div>
           {addingChat ? (
             <div>
-              <CharacterChat
+              <CharacterChatTyped
                 token={props.token}
                 user={props.user}
                 mode="creation"

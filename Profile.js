@@ -293,11 +293,7 @@ const Profile = (props) => {
 
   const characterTab = (
     <>
-      <div
-        className={
-          'col-12 profile-header-bg p-2 ' + ' profile-header' + Constants.NOTCH
-        }
-      >
+      <div className={'col-12 profile-header-bg p-2 ' + ' profile-header'}>
         <div className="row pb-1 pt-2  ">
           <div className="container">
             <div

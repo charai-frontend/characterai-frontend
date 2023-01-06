@@ -12,8 +12,8 @@ import {
   Category,
   Character,
   CharactersByCategory,
+  Participant,
   TrendingScores,
-  User,
 } from '../types';
 import { compareCharactersByReceivedMessages } from '../utils/character-utils';
 import CategoryCarousel from './CategoryCarousel';
@@ -26,7 +26,7 @@ type Props = {
   trendingCharacters: Character[];
   recommended: Character[];
   trendingScoresByCharId: TrendingScores;
-  user: User;
+  user: Participant;
   token: string;
   setLoginOpen: () => void;
   login: boolean;

@@ -1,20 +1,20 @@
 import React from 'react';
-import { MdMenuBook, MdHelpOutline, MdPerson, MdSearch } from 'react-icons/md';
+import { MdHelpOutline, MdMenuBook, MdPerson, MdSearch } from 'react-icons/md';
 import { Link } from 'react-router-dom';
 import { Button } from 'reactstrap';
 
-import Logo from './components/Logo';
-import { User } from './types';
-import { buildUrlParams } from './utils.js';
 import * as Constants from './Constants';
+import Logo from './components/Logo';
+import { Participant } from './types';
+import { buildUrlParams } from './utils.js';
 
 const HEADER_ICON_SIZE = 28;
 // Needs to match constant used in views
 // TODO(irwan): Use from App.js
-const LAZY_USERNAME_PREFIX = "Guest-2je9q78"
+const LAZY_USERNAME_PREFIX = 'Guest-2je9q78';
 
 type HeaderProps = {
-  user?: User;
+  user?: Participant;
 };
 
 const Header = ({ user }: HeaderProps) => {
@@ -39,7 +39,11 @@ const Header = ({ user }: HeaderProps) => {
         >
           <MdSearch size={HEADER_ICON_SIZE} />
         </Link>
-        <a className="btn" href={Constants.CHARACTER_BOOK_LINK} target="_blank"
+        <a
+          className="btn"
+          href={Constants.CHARACTER_BOOK_LINK}
+          rel="noreferrer"
+          target="_blank"
         >
           <MdMenuBook size={HEADER_ICON_SIZE} />
         </a>
@@ -51,12 +55,13 @@ const Header = ({ user }: HeaderProps) => {
           <MdHelpOutline size={HEADER_ICON_SIZE} />
         </Link>
         {/* NOTE: this isn't super robust */}
-        {user?.user?.username === 'ANONYMOUS' || user?.user?.username.startsWith(LAZY_USERNAME_PREFIX) ? (
+        {user?.user?.username === 'ANONYMOUS' ||
+        user?.user?.username.startsWith(LAZY_USERNAME_PREFIX) ? (
           <Link to="/login">
             <Button
               size="sm"
               color="primary"
-              style={{ marginRight: 10, minWidth: 60, fontSize: "0.7rem" }}
+              style={{ marginRight: 10, minWidth: 60, fontSize: '0.7rem' }}
             >
               Sign Up
             </Button>

@@ -1,15 +1,14 @@
 import classNames from 'classnames';
 import React from 'react';
-import { MobileView } from 'react-device-detect';
-import { isIOS, isMobile } from 'react-device-detect';
+import { MobileView, isIOS, isMobile } from 'react-device-detect';
 
 import Header from './Header';
 import LoginModal from './LoginModal';
 import Nav, { getNavStyle, navClassNames } from './Nav';
-import { User } from './types';
+import { Participant } from './types';
 
 type AppWrapperProps = {
-  user?: User;
+  user?: Participant;
   children: React.ReactNode;
   setLoginOpen?: () => void;
   login?: boolean;
