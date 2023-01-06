@@ -132,12 +132,15 @@ const Signup = (props) => {
           name: formData.username,
           avatar_type: formData.avatar_type,
           acknowledgement: formData.acknowledgement,
-          lazy_user_uuid: localStorage.getItem('uuid')
+          lazy_user_uuid: localStorage.getItem('uuid'),
         },
         getHeaders(),
       )
       .then((response) => {
-        if (response.data.status === 'OK') {
+        if (
+          response.data.status === 'OK' ||
+          response.data.status === 'Error: signup already complete'
+        ) {
           props.getUser();
           navigate(`/${window.location.search}`);
         } else {
@@ -205,9 +208,9 @@ const Signup = (props) => {
                       autoComplete="off"
                       value={formData.username}
                       onChange={handleFormEntry}
-                      maxlength="20"
+                      maxLength="20"
                       size="20"
-                      style={{"width": "300px"}}
+                      style={{ width: '300px' }}
                     />
                     {showErrors && errors.username && (
                       <p className="alert alert-danger">{errors.username}</p>
