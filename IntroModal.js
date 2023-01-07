@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'reactstrap';
 
-import { VISITED_KEY } from './Constants';
+import { NOTCH, VISITED_KEY } from './Constants';
 
 export default function IntroModal() {
   const [open, setOpen] = useState(false);
@@ -17,7 +17,7 @@ export default function IntroModal() {
   };
 
   return (
-    <Modal isOpen={open}>
+    <Modal isOpen={open} style={{ marginTop: NOTCH ? 50 : 0 }}>
       <ModalHeader>👋 Welcome!</ModalHeader>
       <ModalBody>
         <p>Character.AI lets you create Characters and talk to them.</p>

@@ -293,7 +293,10 @@ const Profile = (props) => {
 
   const characterTab = (
     <>
-      <div className={'col-12 profile-header-bg p-2 ' + ' profile-header'}>
+      <div
+        className={'col-12 profile-header-bg p-2 ' + ' profile-header'}
+        style={{ touchAction: 'none' }}
+      >
         <div className="row pb-1 pt-2  ">
           <div className="container">
             <div
@@ -406,7 +409,7 @@ const Profile = (props) => {
           {user ? userInfo : null}
           <div
             className="col-12 col-md-8 profile-characters"
-            style={{ marginTop: 207 }}
+            style={{ marginTop: Constants.PLATFORM === 'ios' ? 177 : 207 }}
           >
             <div
               style={{
@@ -414,6 +417,7 @@ const Profile = (props) => {
                 zIndex: 1000,
                 background: 'white',
                 width: 'inherit',
+                touchAction: 'none',
               }}
             >
               <BootstrapNav tabs>

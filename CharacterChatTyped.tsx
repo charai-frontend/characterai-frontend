@@ -1,5 +1,6 @@
 import axios from 'axios';
 import classNames from 'classnames';
+import JSONbigInt from 'json-bigint';
 import Markdown from 'marked-react';
 import React, {
   useCallback,
@@ -82,7 +83,6 @@ import {
   stripImagePromptText,
 } from './utils.js';
 import { displayNumInteractions } from './utils/character-utils';
-import JSONbigInt from 'json-bigint';
 
 const postVisibilityOptions = [
   { value: 'PUBLIC', label: 'Everyone can see' },
@@ -354,8 +354,9 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
     if (window.AudioContext) {
       (window as any).audioContext = new window.AudioContext();
 
-      const source =
-        (window as any).audioContext.createMediaElementSource(ttsAudio);
+      const source = (window as any).audioContext.createMediaElementSource(
+        ttsAudio,
+      );
       const gainNode = (window as any).audioContext.createGain();
       gainNode.gain.value = 2;
       source.connect(gainNode);
@@ -1154,7 +1155,10 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
 
   const getHeaders = () => {
     return {
-      headers: { Authorization: 'Token ' + props.token },
+      headers: {
+        Authorization: 'Token ' + props.token,
+        'Content-Type': 'application/json',
+      },
     };
   };
 
@@ -1391,11 +1395,10 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
       await axios
         .post(
           '/chat/msg/update/primary/',
-          JSONbigNative.stringify(
-            {
-              message_id: candidate.id,
-              reason: 'SWIPE',
-            }),
+          JSONbigNative.stringify({
+            message_id: candidate.id,
+            reason: 'SWIPE',
+          }),
           getHeaders(),
         )
         //#UNUSED RESPONSE
@@ -2155,7 +2158,11 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
       admin_override: false,
     };
     await axios
-      .put('/chat/annotations/label/', JSONbigNative.stringify(request), getHeaders())
+      .put(
+        '/chat/annotations/label/',
+        JSONbigNative.stringify(request),
+        getHeaders(),
+      )
       //   .then((_response) => { //#NOTE UNUSED
       //     if (successCallback) {
       //       successCallback();
@@ -2434,7 +2441,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
       (translateTapToggle || !translateTap) &&
       candidate.translation &&
       candidate.text.toLowerCase().trim() !==
-      candidate.translation.toLowerCase().trim()
+        candidate.translation.toLowerCase().trim()
     ) {
       const label = translateTap ? '' : 'Translation: ';
       candidate.text = `${candidate.text}\n\n${label}*${candidate.translation}*`;
@@ -3133,15 +3140,15 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                 >
                   {avatar.character__avatar_file_name
                     ? showAvatar(
-                      avatar.name,
-                      avatarSize / 2,
-                      avatar.character__avatar_file_name,
-                    )
+                        avatar.name,
+                        avatarSize / 2,
+                        avatar.character__avatar_file_name,
+                      )
                     : showAvatar(
-                      avatar.name,
-                      avatarSize / 2,
-                      avatar.user__account__avatar_file_name ?? '',
-                    )}
+                        avatar.name,
+                        avatarSize / 2,
+                        avatar.user__account__avatar_file_name ?? '',
+                      )}
                 </div>
               ))}
             {history.avatars &&
@@ -3356,7 +3363,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                   <button
                     className={
                       (!charData?.greeting && viewMsgs.length > 1) ||
-                        viewMsgs.length > 2
+                      viewMsgs.length > 2
                         ? 'btn border btn-primary'
                         : 'btn border'
                     }
@@ -3369,32 +3376,32 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
               </div>
               {((!charData?.greeting && viewMsgs.length > 1) ||
                 viewMsgs.length > 2) && (
-                  <div>
-                    <p className="text-muted" style={{ fontSize: '11pt' }}>
-                      {`Choose other responses by swiping ${charData?.name}'s last
+                <div>
+                  <p className="text-muted" style={{ fontSize: '11pt' }}>
+                    {`Choose other responses by swiping ${charData?.name}'s last
                     message.`}
-                    </p>
-                    <p className="text-muted" style={{ fontSize: '11pt' }}>
-                      <MdRestartAlt size={24} /> if you want to restart this chat
-                      to try again.
-                    </p>
-                    {!props.maxLength || currentLength <= props.maxLength ? (
-                      <span>
-                        {viewMsgs.length >= (props.minimum || 0) && (
-                          <p className="" style={{ fontSize: '11pt' }}>
-                            {`You can move on any time you're ready.`}
-                          </p>
-                        )}
-                      </span>
-                    ) : (
-                      <span>
+                  </p>
+                  <p className="text-muted" style={{ fontSize: '11pt' }}>
+                    <MdRestartAlt size={24} /> if you want to restart this chat
+                    to try again.
+                  </p>
+                  {!props.maxLength || currentLength <= props.maxLength ? (
+                    <span>
+                      {viewMsgs.length >= (props.minimum || 0) && (
                         <p className="" style={{ fontSize: '11pt' }}>
-                          {`You've reached the limit for this example chat.`}
+                          {`You can move on any time you're ready.`}
                         </p>
-                      </span>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </span>
+                  ) : (
+                    <span>
+                      <p className="" style={{ fontSize: '11pt' }}>
+                        {`You've reached the limit for this example chat.`}
+                      </p>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -3430,7 +3437,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                           <span>
                             {history?.description
                               ? 'Talking about ' +
-                              history.description.slice(0, 30)
+                                history.description.slice(0, 30)
                               : charData?.title}
                           </span>
                         </div>
@@ -3449,18 +3456,18 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                             to={
                               charData?.user__username === user?.user?.username
                                 ? {
-                                  pathname: `/profile/${buildUrlParams({
-                                    char: charData?.external_id,
-                                  })}`,
-                                }
-                                : {
-                                  pathname: `/public-profile/${buildUrlParams(
-                                    {
+                                    pathname: `/profile/${buildUrlParams({
                                       char: charData?.external_id,
-                                      username: charData?.user__username,
-                                    },
-                                  )}`,
-                                }
+                                    })}`,
+                                  }
+                                : {
+                                    pathname: `/public-profile/${buildUrlParams(
+                                      {
+                                        char: charData?.external_id,
+                                        username: charData?.user__username,
+                                      },
+                                    )}`,
+                                  }
                             }
                           >
                             @{charData?.user__username}
@@ -3603,8 +3610,9 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                   ) : (
                     <>
                       <div
-                        className={`chatbox text-muted d-flex justify-content-start align-items-center p-0 bg-white ${isMobile ? 'mx-1' : 'mx-3'
-                          }`}
+                        className={`chatbox text-muted d-flex justify-content-start align-items-center p-0 bg-white ${
+                          isMobile ? 'mx-1' : 'mx-3'
+                        }`}
                         style={isMobile ? { flex: 'auto' } : {}}
                       >
                         <ChatActions
@@ -3872,19 +3880,17 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                     alignItems: 'center',
                   }}
                 >
-                  <div
-                    style={{ padding: '20px' }}
-                  >
+                  <div style={{ padding: '20px' }}>
                     {`You're about to be prompted for access to your microphone.
                     Chatting with characters using your voice will only work, if
                     you allow access to your microphone. If access is granted,
                     the microphone will start listening continuously. Tap the
                     microphone button ${(
-                        <MdSettingsVoice
-                          size={25}
-                          style={{ color: '#5fa6bbff' }}
-                        />
-                      )} again to make it stop listening.`}
+                      <MdSettingsVoice
+                        size={25}
+                        style={{ color: '#5fa6bbff' }}
+                      />
+                    )} again to make it stop listening.`}
                   </div>
                   <button
                     onClick={closeMicModal}
@@ -3950,8 +3956,9 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                               <input
                                 type="text"
                                 maxLength={40}
-                                value={`${getShareUrlOrigin()}/c/${charData?.external_id
-                                  }`}
+                                value={`${getShareUrlOrigin()}/c/${
+                                  charData?.external_id
+                                }`}
                                 style={{
                                   fontSize: '16px',
                                   borderWidth: '0 0 1px 0',
@@ -3968,12 +3975,14 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                               </Button>
                             </div>
                             <div
-                              className={`mt-2 row ${isMobile ? 'w-100' : 'w-50'
-                                }`}
+                              className={`mt-2 row ${
+                                isMobile ? 'w-100' : 'w-50'
+                              }`}
                             >
                               <SocialSharePanel
-                                link={`${getShareUrlOrigin()}/c/${charData?.external_id
-                                  }`}
+                                link={`${getShareUrlOrigin()}/c/${
+                                  charData?.external_id
+                                }`}
                                 shareTitle={
                                   'This AI will BLOW YOUR MIND 🤯 #characterai'
                                 }
@@ -4007,8 +4016,9 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                               )}
                           </div>
                           <div
-                            className={`${isMobile ? 'col' : 'col-auto'
-                              } align-items-center`}
+                            className={`${
+                              isMobile ? 'col' : 'col-auto'
+                            } align-items-center`}
                           >
                             <Dropdown
                               options={postVisibilityOptions}
@@ -4017,10 +4027,10 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                               }
                               value={postVisibility}
                               placeholder="Select an option"
-                            //#NOTE REACT-DROPDOWN DOES NOT SUPPORT STYLE
-                            //   style={{
-                            //     width: isMobile ? '100%' : '200px',
-                            //   }}
+                              //#NOTE REACT-DROPDOWN DOES NOT SUPPORT STYLE
+                              //   style={{
+                              //     width: isMobile ? '100%' : '200px',
+                              //   }}
                             />
                           </div>
                         </div>
@@ -4029,10 +4039,11 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                           Post Title (Optional)
                         </div>
                         <div
-                          className={`row mb-2 w-100 ${isMobile
-                            ? 'justify-content-center'
-                            : 'justify-content-start'
-                            }`}
+                          className={`row mb-2 w-100 ${
+                            isMobile
+                              ? 'justify-content-center'
+                              : 'justify-content-start'
+                          }`}
                         >
                           <input
                             type="text"
@@ -4092,9 +4103,9 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
 
                             {/* TODO: delete conditional rendering of empty div */}
                             {viewMsgs.length > 2 &&
-                              (postStartMessageIndex == null ||
-                                postEndMessageIndex == null ||
-                                postEndMessageIndex - postStartMessageIndex >
+                            (postStartMessageIndex == null ||
+                              postEndMessageIndex == null ||
+                              postEndMessageIndex - postStartMessageIndex >
                                 1) ? (
                               <div></div>
                             ) : (
@@ -4106,8 +4117,9 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                         )}
 
                         <div
-                          className={`${isMobile ? '' : 'row w-100 pt-4 justify-content-end'
-                            }`}
+                          className={`${
+                            isMobile ? '' : 'row w-100 pt-4 justify-content-end'
+                          }`}
                         >
                           <button
                             onClick={handleCreatePost}
