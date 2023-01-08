@@ -326,7 +326,6 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
   const [primaryCandidate, setPrimaryCandidate] =
     useState<ChatMessageCandidates | null>();
   const [seenCandidateIds, setSeenCandidateIds] = useState<number[]>([]);
-  const [isNewHistory, setIsNewHistory] = useState(false);
 
   const primaryCandidateRef = useRef<ChatMessageCandidates | null>();
   const seenCandidateIdsRef = useRef<number[] | null>();
@@ -1005,8 +1004,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
         .then((response) => {
           if (response?.data.status == 'OK') {
             setViewMsgs([]);
-
-            setHistory({ ...response.data });
+            setHistory({ ...response.data, isNewHistory: true });
             setCurrentLength(0);
             setAltIndex(0);
             if (response.data.speech) {
@@ -1119,7 +1117,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
   };
 
   const loadMessages = async (clean = false) => {
-    if (history && isNewHistory) {
+    if (history && history.isNewHistory) {
       setMsgsFromResponseData(
         history.messages,
         history.has_more,
@@ -1140,7 +1138,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
         setMsgsFromResponseData(
           response.data.messages,
           response.data.has_more,
-          0,
+          response.data.next_page,
           clean,
         );
       })
@@ -2441,7 +2439,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
       (translateTapToggle || !translateTap) &&
       candidate.translation &&
       candidate.text.toLowerCase().trim() !==
-        candidate.translation.toLowerCase().trim()
+      candidate.translation.toLowerCase().trim()
     ) {
       const label = translateTap ? '' : 'Translation: ';
       candidate.text = `${candidate.text}\n\n${label}*${candidate.translation}*`;
@@ -3140,15 +3138,15 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                 >
                   {avatar.character__avatar_file_name
                     ? showAvatar(
-                        avatar.name,
-                        avatarSize / 2,
-                        avatar.character__avatar_file_name,
-                      )
+                      avatar.name,
+                      avatarSize / 2,
+                      avatar.character__avatar_file_name,
+                    )
                     : showAvatar(
-                        avatar.name,
-                        avatarSize / 2,
-                        avatar.user__account__avatar_file_name ?? '',
-                      )}
+                      avatar.name,
+                      avatarSize / 2,
+                      avatar.user__account__avatar_file_name ?? '',
+                    )}
                 </div>
               ))}
             {history.avatars &&
@@ -3363,7 +3361,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                   <button
                     className={
                       (!charData?.greeting && viewMsgs.length > 1) ||
-                      viewMsgs.length > 2
+                        viewMsgs.length > 2
                         ? 'btn border btn-primary'
                         : 'btn border'
                     }
@@ -3376,32 +3374,32 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
               </div>
               {((!charData?.greeting && viewMsgs.length > 1) ||
                 viewMsgs.length > 2) && (
-                <div>
-                  <p className="text-muted" style={{ fontSize: '11pt' }}>
-                    {`Choose other responses by swiping ${charData?.name}'s last
+                  <div>
+                    <p className="text-muted" style={{ fontSize: '11pt' }}>
+                      {`Choose other responses by swiping ${charData?.name}'s last
                     message.`}
-                  </p>
-                  <p className="text-muted" style={{ fontSize: '11pt' }}>
-                    <MdRestartAlt size={24} /> if you want to restart this chat
-                    to try again.
-                  </p>
-                  {!props.maxLength || currentLength <= props.maxLength ? (
-                    <span>
-                      {viewMsgs.length >= (props.minimum || 0) && (
+                    </p>
+                    <p className="text-muted" style={{ fontSize: '11pt' }}>
+                      <MdRestartAlt size={24} /> if you want to restart this chat
+                      to try again.
+                    </p>
+                    {!props.maxLength || currentLength <= props.maxLength ? (
+                      <span>
+                        {viewMsgs.length >= (props.minimum || 0) && (
+                          <p className="" style={{ fontSize: '11pt' }}>
+                            {`You can move on any time you're ready.`}
+                          </p>
+                        )}
+                      </span>
+                    ) : (
+                      <span>
                         <p className="" style={{ fontSize: '11pt' }}>
-                          {`You can move on any time you're ready.`}
+                          {`You've reached the limit for this example chat.`}
                         </p>
-                      )}
-                    </span>
-                  ) : (
-                    <span>
-                      <p className="" style={{ fontSize: '11pt' }}>
-                        {`You've reached the limit for this example chat.`}
-                      </p>
-                    </span>
-                  )}
-                </div>
-              )}
+                      </span>
+                    )}
+                  </div>
+                )}
             </div>
           </div>
         ) : (
@@ -3437,7 +3435,7 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                           <span>
                             {history?.description
                               ? 'Talking about ' +
-                                history.description.slice(0, 30)
+                              history.description.slice(0, 30)
                               : charData?.title}
                           </span>
                         </div>
@@ -3456,18 +3454,18 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                             to={
                               charData?.user__username === user?.user?.username
                                 ? {
-                                    pathname: `/profile/${buildUrlParams({
-                                      char: charData?.external_id,
-                                    })}`,
-                                  }
+                                  pathname: `/profile/${buildUrlParams({
+                                    char: charData?.external_id,
+                                  })}`,
+                                }
                                 : {
-                                    pathname: `/public-profile/${buildUrlParams(
-                                      {
-                                        char: charData?.external_id,
-                                        username: charData?.user__username,
-                                      },
-                                    )}`,
-                                  }
+                                  pathname: `/public-profile/${buildUrlParams(
+                                    {
+                                      char: charData?.external_id,
+                                      username: charData?.user__username,
+                                    },
+                                  )}`,
+                                }
                             }
                           >
                             @{charData?.user__username}
@@ -3610,9 +3608,8 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                   ) : (
                     <>
                       <div
-                        className={`chatbox text-muted d-flex justify-content-start align-items-center p-0 bg-white ${
-                          isMobile ? 'mx-1' : 'mx-3'
-                        }`}
+                        className={`chatbox text-muted d-flex justify-content-start align-items-center p-0 bg-white ${isMobile ? 'mx-1' : 'mx-3'
+                          }`}
                         style={isMobile ? { flex: 'auto' } : {}}
                       >
                         <ChatActions
@@ -3886,11 +3883,11 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                     you allow access to your microphone. If access is granted,
                     the microphone will start listening continuously. Tap the
                     microphone button ${(
-                      <MdSettingsVoice
-                        size={25}
-                        style={{ color: '#5fa6bbff' }}
-                      />
-                    )} again to make it stop listening.`}
+                        <MdSettingsVoice
+                          size={25}
+                          style={{ color: '#5fa6bbff' }}
+                        />
+                      )} again to make it stop listening.`}
                   </div>
                   <button
                     onClick={closeMicModal}
@@ -3956,9 +3953,8 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                               <input
                                 type="text"
                                 maxLength={40}
-                                value={`${getShareUrlOrigin()}/c/${
-                                  charData?.external_id
-                                }`}
+                                value={`${getShareUrlOrigin()}/c/${charData?.external_id
+                                  }`}
                                 style={{
                                   fontSize: '16px',
                                   borderWidth: '0 0 1px 0',
@@ -3975,14 +3971,12 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                               </Button>
                             </div>
                             <div
-                              className={`mt-2 row ${
-                                isMobile ? 'w-100' : 'w-50'
-                              }`}
+                              className={`mt-2 row ${isMobile ? 'w-100' : 'w-50'
+                                }`}
                             >
                               <SocialSharePanel
-                                link={`${getShareUrlOrigin()}/c/${
-                                  charData?.external_id
-                                }`}
+                                link={`${getShareUrlOrigin()}/c/${charData?.external_id
+                                  }`}
                                 shareTitle={
                                   'This AI will BLOW YOUR MIND 🤯 #characterai'
                                 }
@@ -4016,9 +4010,8 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                               )}
                           </div>
                           <div
-                            className={`${
-                              isMobile ? 'col' : 'col-auto'
-                            } align-items-center`}
+                            className={`${isMobile ? 'col' : 'col-auto'
+                              } align-items-center`}
                           >
                             <Dropdown
                               options={postVisibilityOptions}
@@ -4027,10 +4020,10 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                               }
                               value={postVisibility}
                               placeholder="Select an option"
-                              //#NOTE REACT-DROPDOWN DOES NOT SUPPORT STYLE
-                              //   style={{
-                              //     width: isMobile ? '100%' : '200px',
-                              //   }}
+                            //#NOTE REACT-DROPDOWN DOES NOT SUPPORT STYLE
+                            //   style={{
+                            //     width: isMobile ? '100%' : '200px',
+                            //   }}
                             />
                           </div>
                         </div>
@@ -4039,11 +4032,10 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                           Post Title (Optional)
                         </div>
                         <div
-                          className={`row mb-2 w-100 ${
-                            isMobile
-                              ? 'justify-content-center'
-                              : 'justify-content-start'
-                          }`}
+                          className={`row mb-2 w-100 ${isMobile
+                            ? 'justify-content-center'
+                            : 'justify-content-start'
+                            }`}
                         >
                           <input
                             type="text"
@@ -4103,9 +4095,9 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
 
                             {/* TODO: delete conditional rendering of empty div */}
                             {viewMsgs.length > 2 &&
-                            (postStartMessageIndex == null ||
-                              postEndMessageIndex == null ||
-                              postEndMessageIndex - postStartMessageIndex >
+                              (postStartMessageIndex == null ||
+                                postEndMessageIndex == null ||
+                                postEndMessageIndex - postStartMessageIndex >
                                 1) ? (
                               <div></div>
                             ) : (
@@ -4117,9 +4109,8 @@ export const CharacterChatTyped = (props: CharacterChatProps) => {
                         )}
 
                         <div
-                          className={`${
-                            isMobile ? '' : 'row w-100 pt-4 justify-content-end'
-                          }`}
+                          className={`${isMobile ? '' : 'row w-100 pt-4 justify-content-end'
+                            }`}
                         >
                           <button
                             onClick={handleCreatePost}
